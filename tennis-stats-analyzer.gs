@@ -2157,25 +2157,73 @@ function createServeSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDataRo
  */
 function createForehandSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // Calculate percentages for each row dynamically
+    const data = dataSheet.getRange(1, 1, lastDataRow, 36).getValues();
+    const percentageData = [['Match Date', 'Topspin %', 'Flat %', 'Slice %']];
+    
+    // Collect all matches with their data - use filename as key to avoid duplicates
+    const matchesMap = new Map();
+    for (let i = 1; i < data.length; i++) {
+      const matchDate = data[i][0];
+      const fileName = String(data[i][1] || ''); // Column 2 = File Name
+      const topspin = data[i][33] || 0;  // Column 34
+      const flat = data[i][34] || 0;     // Column 35
+      const slice = data[i][35] || 0;    // Column 36
+      const total = topspin + flat + slice;
+      
+      // Skip if no filename (invalid row)
+      if (!fileName) continue;
+      
+      // Use filename as key to prevent duplicates
+      const matchData = {
+        date: matchDate,
+        dateTime: matchDate instanceof Date ? matchDate.getTime() : new Date(matchDate).getTime(),
+        topspin: total > 0 ? (topspin / total) * 100 : 0,
+        flat: total > 0 ? (flat / total) * 100 : 0,
+        slice: total > 0 ? (slice / total) * 100 : 0
+      };
+      
+      // Only keep the first occurrence of each filename
+      if (!matchesMap.has(fileName)) {
+        matchesMap.set(fileName, matchData);
+      }
+    }
+    
+    // Convert map to array and sort by date
+    const matches = Array.from(matchesMap.values());
+    matches.sort((a, b) => a.dateTime - b.dateTime);
+    
+    console.log(`Forehand Spin chart: Processing ${matches.length} unique matches from ${data.length - 1} total rows`);
+    
+    // Build sorted data array
+    for (const match of matches) {
+      percentageData.push([match.date, match.topspin, match.flat, match.slice]);
+    }
+    
+    // Write percentage data to temporary range
+    const tempStartRow = lastDataRow + 15;
+    const tempRange = chartsSheet.getRange(tempStartRow, 1, percentageData.length, 4);
+    tempRange.setValues(percentageData);
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
-      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
-      .addRange(dataSheet.getRange(1, 34, lastDataRow, 1)) // FH Topspin
-      .addRange(dataSheet.getRange(1, 35, lastDataRow, 1)) // FH Flat
-      .addRange(dataSheet.getRange(1, 36, lastDataRow, 1)) // FH Slice
+      .addRange(chartsSheet.getRange(tempStartRow, 1, percentageData.length, 1)) // Match Date
+      .addRange(chartsSheet.getRange(tempStartRow, 2, percentageData.length, 1)) // Topspin %
+      .addRange(chartsSheet.getRange(tempStartRow, 3, percentageData.length, 1)) // Flat %
+      .addRange(chartsSheet.getRange(tempStartRow, 4, percentageData.length, 1)) // Slice %
       .setPosition(startRow, 1, 0, 0)
-      .setOption('title', '🎾 Forehand Spin Distribution Trends (Per Match)')
+      .setOption('title', '🎾 Forehand Spin Distribution (%)')
       .setOption('width', 800)
       .setOption('height', 400)
       .setOption('legend', {position: 'bottom'})
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
-      .setOption('vAxis', {title: 'Count', minValue: 0})
+      .setOption('vAxis', {title: 'Percentage (%)', minValue: 0, maxValue: 100})
       .setOption('curveType', 'function')
       .setOption('pointSize', 5)
       .setOption('series', {
-        0: {color: '#EA4335', lineWidth: 3, labelInLegend: 'Topspin'},
-        1: {color: '#FBBC04', lineWidth: 3, labelInLegend: 'Flat'},
-        2: {color: '#4285F4', lineWidth: 3, labelInLegend: 'Slice'}
+        0: {color: '#EA4335', lineWidth: 3, labelInLegend: 'Topspin %'},
+        1: {color: '#FBBC04', lineWidth: 3, labelInLegend: 'Flat %'},
+        2: {color: '#4285F4', lineWidth: 3, labelInLegend: 'Slice %'}
       })
       .build();
     
@@ -2191,25 +2239,73 @@ function createForehandSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDat
  */
 function createBackhandSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // Calculate percentages for each row dynamically
+    const data = dataSheet.getRange(1, 1, lastDataRow, 39).getValues();
+    const percentageData = [['Match Date', 'Topspin %', 'Flat %', 'Slice %']];
+    
+    // Collect all matches with their data - use filename as key to avoid duplicates
+    const matchesMap = new Map();
+    for (let i = 1; i < data.length; i++) {
+      const matchDate = data[i][0];
+      const fileName = String(data[i][1] || ''); // Column 2 = File Name
+      const topspin = data[i][36] || 0;  // Column 37
+      const flat = data[i][37] || 0;     // Column 38
+      const slice = data[i][38] || 0;    // Column 39
+      const total = topspin + flat + slice;
+      
+      // Skip if no filename (invalid row)
+      if (!fileName) continue;
+      
+      // Use filename as key to prevent duplicates
+      const matchData = {
+        date: matchDate,
+        dateTime: matchDate instanceof Date ? matchDate.getTime() : new Date(matchDate).getTime(),
+        topspin: total > 0 ? (topspin / total) * 100 : 0,
+        flat: total > 0 ? (flat / total) * 100 : 0,
+        slice: total > 0 ? (slice / total) * 100 : 0
+      };
+      
+      // Only keep the first occurrence of each filename
+      if (!matchesMap.has(fileName)) {
+        matchesMap.set(fileName, matchData);
+      }
+    }
+    
+    // Convert map to array and sort by date
+    const matches = Array.from(matchesMap.values());
+    matches.sort((a, b) => a.dateTime - b.dateTime);
+    
+    console.log(`Backhand Spin chart: Processing ${matches.length} unique matches from ${data.length - 1} total rows`);
+    
+    // Build sorted data array
+    for (const match of matches) {
+      percentageData.push([match.date, match.topspin, match.flat, match.slice]);
+    }
+    
+    // Write percentage data to temporary range
+    const tempStartRow = lastDataRow + 20;
+    const tempRange = chartsSheet.getRange(tempStartRow, 1, percentageData.length, 4);
+    tempRange.setValues(percentageData);
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
-      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
-      .addRange(dataSheet.getRange(1, 37, lastDataRow, 1)) // BH Topspin
-      .addRange(dataSheet.getRange(1, 38, lastDataRow, 1)) // BH Flat
-      .addRange(dataSheet.getRange(1, 39, lastDataRow, 1)) // BH Slice
+      .addRange(chartsSheet.getRange(tempStartRow, 1, percentageData.length, 1)) // Match Date
+      .addRange(chartsSheet.getRange(tempStartRow, 2, percentageData.length, 1)) // Topspin %
+      .addRange(chartsSheet.getRange(tempStartRow, 3, percentageData.length, 1)) // Flat %
+      .addRange(chartsSheet.getRange(tempStartRow, 4, percentageData.length, 1)) // Slice %
       .setPosition(startRow, 1, 0, 0)
-      .setOption('title', '🎾 Backhand Spin Distribution Trends (Per Match)')
+      .setOption('title', '🎾 Backhand Spin Distribution (%)')
       .setOption('width', 800)
       .setOption('height', 400)
       .setOption('legend', {position: 'bottom'})
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
-      .setOption('vAxis', {title: 'Count', minValue: 0})
+      .setOption('vAxis', {title: 'Percentage (%)', minValue: 0, maxValue: 100})
       .setOption('curveType', 'function')
       .setOption('pointSize', 5)
       .setOption('series', {
-        0: {color: '#FF1744', lineWidth: 3, labelInLegend: 'Topspin'},  // Bright Red
-        1: {color: '#00E676', lineWidth: 3, labelInLegend: 'Flat'},     // Bright Green
-        2: {color: '#2979FF', lineWidth: 3, labelInLegend: 'Slice'}     // Bright Blue
+        0: {color: '#FF1744', lineWidth: 3, labelInLegend: 'Topspin %'},  // Bright Red
+        1: {color: '#00E676', lineWidth: 3, labelInLegend: 'Flat %'},     // Bright Green
+        2: {color: '#2979FF', lineWidth: 3, labelInLegend: 'Slice %'}     // Bright Blue
       })
       .build();
     
