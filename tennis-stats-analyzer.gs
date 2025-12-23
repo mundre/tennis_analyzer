@@ -402,14 +402,16 @@ function isFileProcessed(fileId) {
   const data = dataSheet.getDataRange().getValues();
   
   // Check if file ID exists in the File ID column
-  // File ID is the second-to-last column (after all stats, before timestamp)
+  // File ID is column 57 (third from last: FileID, isPracticeMatch, ProcessedDate)
   for (let i = 1; i < data.length; i++) {
-    const rowFileId = data[i][data[i].length - 2]; // Second to last column
+    const rowFileId = data[i][data[i].length - 3]; // Third from last column (File ID)
     if (rowFileId === fileId) {
+      console.log(`File already processed: ${fileId}`);
       return true;
     }
   }
   
+  console.log(`File NOT yet processed: ${fileId}`);
   return false;
 }
 
@@ -1759,38 +1761,39 @@ function createServeErrorSpinChart(dataSheet, chartsSheet, startRow, lastDataRow
     const data = dataSheet.getRange(1, 1, lastDataRow, 33).getValues();
     const percentageData = [['Match Date', 'Flat %', 'Kick %', 'Slice %']];
     
-    // Collect all matches with their data
-    const matches = [];
+    // Collect all matches with their data - use filename as key to avoid duplicates
+    const matchesMap = new Map();
     for (let i = 1; i < data.length; i++) {
       const matchDate = data[i][0];
+      const fileName = String(data[i][1] || ''); // Column 2 = File Name
       const flat = data[i][30] || 0;  // Column 31
       const kick = data[i][31] || 0;  // Column 32
       const slice = data[i][32] || 0; // Column 33
       const total = flat + kick + slice;
       
-      if (total > 0) {
-        matches.push({
-          date: matchDate,
-          flat: (flat / total) * 100,
-          kick: (kick / total) * 100,
-          slice: (slice / total) * 100
-        });
-      } else {
-        matches.push({
-          date: matchDate,
-          flat: 0,
-          kick: 0,
-          slice: 0
-        });
+      // Skip if no filename (invalid row)
+      if (!fileName) continue;
+      
+      // Use filename as key to prevent duplicates
+      const matchData = {
+        date: matchDate,
+        dateTime: matchDate instanceof Date ? matchDate.getTime() : new Date(matchDate).getTime(),
+        flat: total > 0 ? (flat / total) * 100 : 0,
+        kick: total > 0 ? (kick / total) * 100 : 0,
+        slice: total > 0 ? (slice / total) * 100 : 0
+      };
+      
+      // Only keep the first occurrence of each filename
+      if (!matchesMap.has(fileName)) {
+        matchesMap.set(fileName, matchData);
       }
     }
     
-    // Sort by date chronologically
-    matches.sort((a, b) => {
-      const dateA = a.date instanceof Date ? a.date : new Date(a.date);
-      const dateB = b.date instanceof Date ? b.date : new Date(b.date);
-      return dateA - dateB;
-    });
+    // Convert map to array and sort by date
+    const matches = Array.from(matchesMap.values());
+    matches.sort((a, b) => a.dateTime - b.dateTime);
+    
+    console.log(`Serve Error Spin chart: Processing ${matches.length} unique matches from ${data.length - 1} total rows`);
     
     // Build sorted data array
     for (const match of matches) {
@@ -2076,38 +2079,39 @@ function createServeSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDataRo
     const data = dataSheet.getRange(1, 1, lastDataRow, 29).getValues();
     const percentageData = [['Match Date', 'Flat %', 'Kick %', 'Slice %']];
     
-    // Collect all matches with their data
-    const matches = [];
+    // Collect all matches with their data - use filename as key to avoid duplicates
+    const matchesMap = new Map();
     for (let i = 1; i < data.length; i++) {
       const matchDate = data[i][0];
+      const fileName = String(data[i][1] || ''); // Column 2 = File Name
       const flat = data[i][26] || 0;  // Column 27
       const kick = data[i][27] || 0;  // Column 28
       const slice = data[i][28] || 0; // Column 29
       const total = flat + kick + slice;
       
-      if (total > 0) {
-        matches.push({
-          date: matchDate,
-          flat: (flat / total) * 100,
-          kick: (kick / total) * 100,
-          slice: (slice / total) * 100
-        });
-      } else {
-        matches.push({
-          date: matchDate,
-          flat: 0,
-          kick: 0,
-          slice: 0
-        });
+      // Skip if no filename (invalid row)
+      if (!fileName) continue;
+      
+      // Use filename as key to prevent duplicates
+      const matchData = {
+        date: matchDate,
+        dateTime: matchDate instanceof Date ? matchDate.getTime() : new Date(matchDate).getTime(),
+        flat: total > 0 ? (flat / total) * 100 : 0,
+        kick: total > 0 ? (kick / total) * 100 : 0,
+        slice: total > 0 ? (slice / total) * 100 : 0
+      };
+      
+      // Only keep the first occurrence of each filename
+      if (!matchesMap.has(fileName)) {
+        matchesMap.set(fileName, matchData);
       }
     }
     
-    // Sort by date chronologically
-    matches.sort((a, b) => {
-      const dateA = a.date instanceof Date ? a.date : new Date(a.date);
-      const dateB = b.date instanceof Date ? b.date : new Date(b.date);
-      return dateA - dateB;
-    });
+    // Convert map to array and sort by date
+    const matches = Array.from(matchesMap.values());
+    matches.sort((a, b) => a.dateTime - b.dateTime);
+    
+    console.log(`Serve Spin chart: Processing ${matches.length} unique matches from ${data.length - 1} total rows`);
     
     // Build sorted data array
     for (const match of matches) {
