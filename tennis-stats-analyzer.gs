@@ -658,6 +658,17 @@ function parseSwingVisionStats(data, fileName) {
       stats.result = "Loss";
     }
     
+    // Determine if this is a practice match (all stats are 0)
+    const isPracticeMatch = (
+      (stats.totalPointsWon || 0) === 0 &&
+      (stats.totalPoints || 0) === 0 &&
+      (stats.winners || 0) === 0 &&
+      (stats.unforcedErrors || 0) === 0 &&
+      (stats.firstServes || 0) === 0 &&
+      (stats.aces || 0) === 0
+    );
+    stats.isPracticeMatch = isPracticeMatch;
+    
     return stats;
     
   } catch (error) {
@@ -738,18 +749,6 @@ function parseShotsData(data, fileName) {
       const player = data[i][0];
       if (player && player !== "Opponent" && String(player).trim() !== "") {
         playerName = String(player).trim();
-        break;
-      }
-    }
-    
-    // Check if this is a practice/warmup match (all Game and Set columns are 0)
-    // Game column is typically column W (index 22), Set column is typically column X (index 23)
-    let isPracticeMatch = true;
-    for (let i = 1; i < data.length; i++) {
-      const game = parseInt(data[i][22]) || 0;
-      const set = parseInt(data[i][23]) || 0;
-      if (game !== 0 || set !== 0) {
-        isPracticeMatch = false;
         break;
       }
     }
@@ -927,9 +926,6 @@ function parseShotsData(data, fileName) {
     if (backhandSpeeds.length > 0) {
       shotStats.avgBackhandSpeed = backhandSpeeds.reduce((a, b) => a + b, 0) / backhandSpeeds.length;
     }
-    
-    // Add practice match flag to return object
-    shotStats.isPracticeMatch = isPracticeMatch;
     
     return shotStats;
     
@@ -1318,15 +1314,45 @@ function updateCharts() {
 }
 
 /**
- * Create Winners vs Unforced Errors chart
+ * Helper function to get filtered data (exclude practice matches)
+ * Returns filtered data array with specified columns
+ */
+function getFilteredRealMatchData(dataSheet, lastDataRow, columns) {
+  const isPracticeColumn = 58; // "Is Practice Match" column
+  const allData = dataSheet.getRange(1, 1, lastDataRow, Math.max(...columns)).getValues();
+  
+  // Header row
+  const filteredData = [columns.map(col => allData[0][col - 1])];
+  
+  // Filter out practice matches (rows where isPractice === true)
+  for (let i = 1; i < allData.length; i++) {
+    const isPractice = allData[i][isPracticeColumn - 1];
+    if (!isPractice) { // If NOT practice match, include it
+      filteredData.push(columns.map(col => allData[i][col - 1]));
+    }
+  }
+  
+  return filteredData;
+}
+
+/**
+ * Create Winners vs Unforced Errors chart (REAL MATCHES ONLY)
  */
 function createWinnersUEChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // Get filtered data (real matches only)
+    const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 14, 18]);
+    
+    // Write filtered data to temporary range on charts sheet
+    const tempStartRow = lastDataRow + 100;
+    const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 3);
+    tempRange.setValues(filteredData);
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
-      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
-      .addRange(dataSheet.getRange(1, 14, lastDataRow, 1)) // Total Winners (column 14)
-      .addRange(dataSheet.getRange(1, 18, lastDataRow, 1)) // Total Unforced Errors (column 18)
+      .addRange(chartsSheet.getRange(tempStartRow, 1, filteredData.length, 1)) // Match Date
+      .addRange(chartsSheet.getRange(tempStartRow, 2, filteredData.length, 1)) // Total Winners
+      .addRange(chartsSheet.getRange(tempStartRow, 3, filteredData.length, 1)) // Total Unforced Errors
       .setPosition(startRow, 1, 0, 0)
       .setOption('title', '🎾 Winners vs Unforced Errors Over Time')
       .setOption('width', 800)
@@ -1349,16 +1375,24 @@ function createWinnersUEChart(dataSheet, chartsSheet, startRow, lastDataRow) {
 }
 
 /**
- * Create Serve Statistics chart
+ * Create Serve Statistics chart (REAL MATCHES ONLY)
  */
 function createServeStatsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // Get filtered data (real matches only)
+    const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 6, 7, 24]);
+    
+    // Write filtered data to temporary range
+    const tempStartRow = lastDataRow + 110;
+    const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 4);
+    tempRange.setValues(filteredData);
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
-      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
-      .addRange(dataSheet.getRange(1, 6, lastDataRow, 1)) // First Serve % (column 6)
-      .addRange(dataSheet.getRange(1, 7, lastDataRow, 1)) // First Serve Points Won % (column 7)
-      .addRange(dataSheet.getRange(1, 24, lastDataRow, 1)) // Points Won % (column 24)
+      .addRange(chartsSheet.getRange(tempStartRow, 1, filteredData.length, 1)) // Match Date
+      .addRange(chartsSheet.getRange(tempStartRow, 2, filteredData.length, 1)) // First Serve %
+      .addRange(chartsSheet.getRange(tempStartRow, 3, filteredData.length, 1)) // First Serve Points Won %
+      .addRange(chartsSheet.getRange(tempStartRow, 4, filteredData.length, 1)) // Points Won %
       .setPosition(startRow, 1, 0, 0)
       .setOption('title', '🎯 Serve Statistics Over Time')
       .setOption('width', 800)
@@ -1410,7 +1444,7 @@ function createResultsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
 }
 
 /**
- * Create Serve Speed Trends chart (NEW!)
+ * Create Serve Speed Trends chart (ALL MATCHES - includes practice)
  */
 function createServeSpeedChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
@@ -1441,7 +1475,7 @@ function createServeSpeedChart(dataSheet, chartsSheet, startRow, lastDataRow) {
 }
 
 /**
- * Create Shot Speed Comparison chart (NEW!)
+ * Create Shot Speed Comparison chart (ALL MATCHES - includes practice)
  */
 function createShotSpeedChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
@@ -1472,7 +1506,7 @@ function createShotSpeedChart(dataSheet, chartsSheet, startRow, lastDataRow) {
 }
 
 /**
- * Create Unforced Errors by Location chart (Net vs Out for FH/BH)
+ * Create Unforced Errors by Location chart (ALL MATCHES - includes practice)
  */
 function createUnforcedErrorLocationChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
@@ -1777,12 +1811,20 @@ function createAcesDoubleFaultsChart(dataSheet, chartsSheet, startRow, lastDataR
  */
 function createBreakPointChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // Get filtered data (real matches only)
+    const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 11, 12, 13]);
+    
+    // Write filtered data to temporary range
+    const tempStartRow = lastDataRow + 120;
+    const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 4);
+    tempRange.setValues(filteredData);
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
-      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
-      .addRange(dataSheet.getRange(1, 11, lastDataRow, 1)) // Break Points Won (column 11)
-      .addRange(dataSheet.getRange(1, 12, lastDataRow, 1)) // Break Points Total (column 12)
-      .addRange(dataSheet.getRange(1, 13, lastDataRow, 1)) // Break Point Conversion % (column 13)
+      .addRange(chartsSheet.getRange(tempStartRow, 1, filteredData.length, 1)) // Match Date
+      .addRange(chartsSheet.getRange(tempStartRow, 2, filteredData.length, 1)) // Break Points Won
+      .addRange(chartsSheet.getRange(tempStartRow, 3, filteredData.length, 1)) // Break Points Total
+      .addRange(chartsSheet.getRange(tempStartRow, 4, filteredData.length, 1)) // Break Point Conversion %
       .setPosition(startRow, 1, 0, 0)
       .setOption('title', '🎯 Break Point Performance')
       .setOption('width', 800)
@@ -1812,12 +1854,20 @@ function createBreakPointChart(dataSheet, chartsSheet, startRow, lastDataRow) {
  */
 function createWinnersBreakdownChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // Get filtered data (real matches only)
+    const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 15, 16, 17]);
+    
+    // Write filtered data to temporary range
+    const tempStartRow = lastDataRow + 130;
+    const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 4);
+    tempRange.setValues(filteredData);
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.COLUMN)
-      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
-      .addRange(dataSheet.getRange(1, 15, lastDataRow, 1)) // Service Winners (column 15)
-      .addRange(dataSheet.getRange(1, 16, lastDataRow, 1)) // Forehand Winners (column 16)
-      .addRange(dataSheet.getRange(1, 17, lastDataRow, 1)) // Backhand Winners (column 17)
+      .addRange(chartsSheet.getRange(tempStartRow, 1, filteredData.length, 1)) // Match Date
+      .addRange(chartsSheet.getRange(tempStartRow, 2, filteredData.length, 1)) // Service Winners
+      .addRange(chartsSheet.getRange(tempStartRow, 3, filteredData.length, 1)) // Forehand Winners
+      .addRange(chartsSheet.getRange(tempStartRow, 4, filteredData.length, 1)) // Backhand Winners
       .setPosition(startRow, 1, 0, 0)
       .setOption('title', '🏆 Winners Breakdown by Type')
       .setOption('width', 800)
@@ -1846,11 +1896,19 @@ function createWinnersBreakdownChart(dataSheet, chartsSheet, startRow, lastDataR
  */
 function createUEBreakdownChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // Get filtered data (real matches only)
+    const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 19, 20]);
+    
+    // Write filtered data to temporary range
+    const tempStartRow = lastDataRow + 140;
+    const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 3);
+    tempRange.setValues(filteredData);
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
-      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
-      .addRange(dataSheet.getRange(1, 19, lastDataRow, 1)) // Forehand UE (column 19)
-      .addRange(dataSheet.getRange(1, 20, lastDataRow, 1)) // Backhand UE (column 20)
+      .addRange(chartsSheet.getRange(tempStartRow, 1, filteredData.length, 1)) // Match Date
+      .addRange(chartsSheet.getRange(tempStartRow, 2, filteredData.length, 1)) // Forehand UE
+      .addRange(chartsSheet.getRange(tempStartRow, 3, filteredData.length, 1)) // Backhand UE
       .setPosition(startRow, 1, 0, 0)
       .setOption('title', '❌ Unforced Errors Breakdown (FH vs BH)')
       .setOption('width', 800)
@@ -1877,12 +1935,20 @@ function createUEBreakdownChart(dataSheet, chartsSheet, startRow, lastDataRow) {
  */
 function createPointsWonChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // Get filtered data (real matches only)
+    const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 22, 23, 24]);
+    
+    // Write filtered data to temporary range
+    const tempStartRow = lastDataRow + 150;
+    const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 4);
+    tempRange.setValues(filteredData);
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
-      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
-      .addRange(dataSheet.getRange(1, 22, lastDataRow, 1)) // Total Points Won (column 22)
-      .addRange(dataSheet.getRange(1, 23, lastDataRow, 1)) // Total Points (column 23)
-      .addRange(dataSheet.getRange(1, 24, lastDataRow, 1)) // Points Won % (column 24)
+      .addRange(chartsSheet.getRange(tempStartRow, 1, filteredData.length, 1)) // Match Date
+      .addRange(chartsSheet.getRange(tempStartRow, 2, filteredData.length, 1)) // Total Points Won
+      .addRange(chartsSheet.getRange(tempStartRow, 3, filteredData.length, 1)) // Total Points
+      .addRange(chartsSheet.getRange(tempStartRow, 4, filteredData.length, 1)) // Points Won %
       .setPosition(startRow, 1, 0, 0)
       .setOption('title', '📊 Points Won Analysis')
       .setOption('width', 800)
@@ -2044,10 +2110,18 @@ function createBackhandSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDat
  */
 function createSecondServePointsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // Get filtered data (real matches only)
+    const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 8]);
+    
+    // Write filtered data to temporary range
+    const tempStartRow = lastDataRow + 160;
+    const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 2);
+    tempRange.setValues(filteredData);
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
-      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
-      .addRange(dataSheet.getRange(1, 8, lastDataRow, 1)) // Second Serve Points Won % (column 8)
+      .addRange(chartsSheet.getRange(tempStartRow, 1, filteredData.length, 1)) // Match Date
+      .addRange(chartsSheet.getRange(tempStartRow, 2, filteredData.length, 1)) // Second Serve Points Won %
       .setPosition(startRow, 1, 0, 0)
       .setOption('title', '🎯 Second Serve Points Won % Trend')
       .setOption('width', 800)
@@ -2073,10 +2147,18 @@ function createSecondServePointsChart(dataSheet, chartsSheet, startRow, lastData
  */
 function createWinnersUERatioChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // Get filtered data (real matches only)
+    const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 21]);
+    
+    // Write filtered data to temporary range
+    const tempStartRow = lastDataRow + 170;
+    const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 2);
+    tempRange.setValues(filteredData);
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
-      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
-      .addRange(dataSheet.getRange(1, 21, lastDataRow, 1)) // Winners/UE Ratio (column 21)
+      .addRange(chartsSheet.getRange(tempStartRow, 1, filteredData.length, 1)) // Match Date
+      .addRange(chartsSheet.getRange(tempStartRow, 2, filteredData.length, 1)) // Winners/UE Ratio
       .setPosition(startRow, 1, 0, 0)
       .setOption('title', '📊 Winners/UE Ratio Trend (Higher is Better)')
       .setOption('width', 800)
