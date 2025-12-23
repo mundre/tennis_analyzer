@@ -13,7 +13,7 @@ const CHECK_INTERVAL_MINUTES = null; // Set to null when using hours
 // Set to null to process all files in folder (normal mode)
 // Set to filename (with extension) to process only that file
 // const TARGET_SINGLE_FILE = null; // Example: "SwingVision-match-2025-11-09 at 15.59.30.xlsx"
- const TARGET_SINGLE_FILE = "SwingVision-match-2025-12-03 at 22.59.47"; // Uncomment to use
+ const TARGET_SINGLE_FILE = "SwingVision-match-2025-12-03 at 22.59.47.xlsx"; // Uncomment to use
 
 const SWINGVISION_FOLDER_NAME = "SwingVision"; // Name of the folder in Google Drive containing XLSX files
 const ENABLE_DIAGNOSTIC_LOGGING = true; // Set to false to disable diagnostic logging to "Diagnostic" sheet
@@ -279,12 +279,6 @@ function getMatchDataSheet() {
       "Total Points Won",
       "Total Points",
       "Points Won %",
-      "Games Won",
-      "Games Total",
-      // Physical Stats
-      "Calories Burned",
-      "Distance Run (mi)",
-      "Avg Heart Rate (BPM)",
       // Speed Statistics (from Shots sheet)
       "Avg 1st Serve Speed (mph)",
       "Avg 2nd Serve Speed (mph)",
@@ -294,6 +288,10 @@ function getMatchDataSheet() {
       "Serve Flat Count",
       "Serve Kick Count",
       "Serve Slice Count",
+      // 🆕 Serve Error Spin Distribution
+      "Serve Error Flat",
+      "Serve Error Kick",
+      "Serve Error Slice",
       // Forehand Spin Distribution
       "FH Topspin Count",
       "FH Flat Count",
@@ -402,9 +400,11 @@ function isFileProcessed(fileId) {
   const dataSheet = getMatchDataSheet();
   const data = dataSheet.getDataRange().getValues();
   
-  // Check if file ID exists in the File ID column (column 22)
+  // Check if file ID exists in the File ID column
+  // File ID is the second-to-last column (after all stats, before timestamp)
   for (let i = 1; i < data.length; i++) {
-    if (data[i][21] === fileId) {
+    const rowFileId = data[i][data[i].length - 2]; // Second to last column
+    if (rowFileId === fileId) {
       return true;
     }
   }
@@ -427,8 +427,32 @@ function extractStatsFromFile(file) {
     
     logDiagnostic("PROCESSING", `Opening file to extract HOST (your) stats only`, fileName, "SUCCESS");
     
+    // Convert XLSX to Google Sheets if needed
+    let spreadsheetId = fileId;
+    const mimeType = file.getMimeType();
+    
+    if (mimeType === MimeType.MICROSOFT_EXCEL || mimeType === MimeType.MICROSOFT_EXCEL_LEGACY) {
+      // File is XLSX - need to convert to Google Sheets
+      logDiagnostic("PROCESSING", `Converting XLSX to Google Sheets`, fileName, "SUCCESS");
+      
+      const blob = file.getBlob();
+      const folder = file.getParents().next(); // Get parent folder
+      const resource = {
+        title: fileName.replace('.xlsx', '') + ' (Google Sheets)',
+        mimeType: MimeType.GOOGLE_SHEETS
+      };
+      
+      // Convert XLSX to Google Sheets using Drive API
+      const convertedFile = Drive.Files.insert(resource, blob, {
+        convert: true
+      });
+      
+      spreadsheetId = convertedFile.id;
+      logDiagnostic("PROCESSING", `Converted to Google Sheets (ID: ${spreadsheetId})`, fileName, "SUCCESS");
+    }
+    
     // Open the spreadsheet file
-    const spreadsheet = SpreadsheetApp.openById(fileId);
+    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
     const statsSheet = spreadsheet.getSheetByName(STATS_SHEET_NAME);
     
     if (!statsSheet) {
@@ -452,6 +476,16 @@ function extractStatsFromFile(file) {
       Object.assign(stats, shotStats);
     } else {
       logDiagnostic("PROCESSING", "Shots sheet not found - speed/spin stats unavailable", fileName, "WARNING");
+    }
+    
+    // Cleanup: Delete temporary converted Google Sheets file if we created one
+    if (spreadsheetId !== fileId) {
+      try {
+        Drive.Files.remove(spreadsheetId);
+        logDiagnostic("PROCESSING", "Deleted temporary converted file", fileName, "SUCCESS");
+      } catch (cleanupError) {
+        logDiagnostic("PROCESSING", "Failed to delete temporary file (non-critical)", fileName, "WARNING", cleanupError.message);
+      }
     }
     
     return {
@@ -497,9 +531,7 @@ function parseSwingVisionStats(data, fileName) {
       doubleFaults: 0,
       totalPointsWon: 0,
       totalPoints: 0,
-      pointsWonPercent: 0,
-      gamesWon: 0,
-      gamesTotal: 0
+      pointsWonPercent: 0
     };
     
     // Helper function to sum Host columns (B, D, F, H, J = indices 1, 3, 5, 7, 9)
@@ -564,6 +596,8 @@ function parseSwingVisionStats(data, fileName) {
         stats.totalPointsWon = sumHostColumns(row);
       } else if (label === "aces") {
         stats.aces = sumHostColumns(row);
+      } else if (label === "double faults") {
+        stats.doubleFaults = sumHostColumns(row);
       } else if (label === "service winners") {
         stats.serviceWinners = sumHostColumns(row);
       } else if (label === "forehand winners") {
@@ -580,8 +614,6 @@ function parseSwingVisionStats(data, fileName) {
         stats.backhandFE = sumHostColumns(row);
       } else if (label === "calories burned (cal)") {
         stats.caloriesBurned = sumHostColumns(row);
-      } else if (label === "distance run (mi)") {
-        stats.distanceRun = sumHostColumns(row);
       } else if (label === "average heart rate (bpm)") {
         const totalBPM = sumHostColumns(row);
         const numSets = row.slice(1).filter(v => v && parseFloat(v) > 0).length / 2;
@@ -652,6 +684,8 @@ function parseShotsData(data, fileName) {
       // Shot speeds (YOUR shots only)
       avgForehandSpeed: 0,
       avgBackhandSpeed: 0,
+      // 🆕 Double faults (from Shots sheet)
+      doubleFaults: 0,
       // Serve spin distribution (YOUR serves only)
       serveFlat: 0,
       serveKick: 0,
@@ -681,7 +715,11 @@ function parseShotsData(data, fileName) {
       backhandErrorsNetSlice: 0,
       backhandErrorsOutTopspin: 0,
       backhandErrorsOutFlat: 0,
-      backhandErrorsOutSlice: 0
+      backhandErrorsOutSlice: 0,
+      // 🆕 Serve Error Spin Distribution (YOUR serve errors: Stroke=serve, Result=Out)
+      serveErrorFlat: 0,
+      serveErrorKick: 0,
+      serveErrorSlice: 0
     };
     
     // Skip header row (row 0)
@@ -720,27 +758,48 @@ function parseShotsData(data, fileName) {
         continue;  // Skip this shot - it's not yours!
       }
       
-      // Process serves
+      // Process serves - Use TYPE column to distinguish 1st vs 2nd serve
       if (stroke.includes("serve")) {
-        // Determine if 1st or 2nd serve based on shot number pattern
-        // In SwingVision, shot 0 or even shots are typically 1st serves
-        const isFirstServe = (shotNumber === 0 || shotNumber % 2 === 0);
+        // Determine if 1st or 2nd serve based on TYPE column
+        const isFirstServe = type.includes("first_serve") || type.includes("first serve");
+        const isSecondServe = type.includes("second_serve") || type.includes("second serve");
         
+        // Collect serve speeds based on type
         if (!isNaN(speed) && speed > 0) {
           if (isFirstServe) {
             serve1stSpeeds.push(speed);
-          } else {
+          } else if (isSecondServe) {
             serve2ndSpeeds.push(speed);
           }
         }
         
-        // Count serve spin types
-        if (spin.includes("flat")) {
-          shotStats.serveFlat++;
-        } else if (spin.includes("kick") || spin.includes("topspin")) {
-          shotStats.serveKick++;
-        } else if (spin.includes("slice")) {
-          shotStats.serveSlice++;
+        // Count serve spin types (for successful serves)
+        if (result === "In") {
+          if (spin.includes("flat")) {
+            shotStats.serveFlat++;
+          } else if (spin.includes("kick") || spin.includes("topspin")) {
+            shotStats.serveKick++;
+          } else if (spin.includes("slice")) {
+            shotStats.serveSlice++;
+          }
+        }
+        
+        // 🆕 Track serve ERROR spin composition (Stroke=serve, Result=Out)
+        const isServeError = result === "Out" || result === "Net" || result === "Long" || result === "Wide";
+        if (isServeError) {
+          if (spin.includes("flat")) {
+            shotStats.serveErrorFlat++;
+          } else if (spin.includes("kick") || spin.includes("topspin")) {
+            shotStats.serveErrorKick++;
+          } else if (spin.includes("slice")) {
+            shotStats.serveErrorSlice++;
+          }
+        }
+        
+        // 🆕 Count DOUBLE FAULTS: Type=second_serve AND Result=Out or Net
+        const isDoubleFault = isSecondServe && (result === "Out" || result === "Net");
+        if (isDoubleFault) {
+          shotStats.doubleFaults++;
         }
       }
       
@@ -897,12 +956,6 @@ function addMatchData(matchData) {
       matchData.totalPointsWon || 0,
       matchData.totalPoints || 0,
       matchData.pointsWonPercent || 0,
-      matchData.gamesWon || 0,
-      matchData.gamesTotal || 0,
-      // Physical Stats
-      matchData.caloriesBurned || 0,
-      matchData.distanceRun || 0,
-      matchData.avgHeartRate || 0,
       // Speed Statistics
       matchData.avg1stServeSpeed || 0,
       matchData.avg2ndServeSpeed || 0,
@@ -912,6 +965,10 @@ function addMatchData(matchData) {
       matchData.serveFlat || 0,
       matchData.serveKick || 0,
       matchData.serveSlice || 0,
+      // Serve Error Spin Distribution
+      matchData.serveErrorFlat || 0,
+      matchData.serveErrorKick || 0,
+      matchData.serveErrorSlice || 0,
       // Forehand Spin Distribution
       matchData.forehandTopspin || 0,
       matchData.forehandFlat || 0,
@@ -1134,27 +1191,100 @@ function updateCharts() {
       return;
     }
     
-    // Create multiple charts
+    // Create multiple charts - Organized by category
     let chartRow = 3;
     
+    // ============ MATCH PERFORMANCE ============
     // 1. Winners vs Unforced Errors Over Time
     createWinnersUEChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 2. First Serve % and Points Won % Over Time
+    // 2. Winners/UE Ratio Trend
+    createWinnersUERatioChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // 3. Winners Breakdown (Service/FH/BH)
+    createWinnersBreakdownChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // 4. Points Won Analysis
+    createPointsWonChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // ============ SERVE PERFORMANCE ============
+    // 5. First Serve % and Points Won %
     createServeStatsChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 3. Match Results Timeline
-    createResultsChart(dataSheet, chartsSheet, chartRow, lastRow);
+    // 6. Second Serve Points Won % Trend
+    createSecondServePointsChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 4. Serve Speed Trends (NEW!)
+    // 7. Aces & Double Faults
+    createAcesDoubleFaultsChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // 8. Serve Speed Trends
     createServeSpeedChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 5. Shot Speed Comparison (NEW!)
+    // 9. Serve Spin Distribution (%)
+    createServeSpinTrendsChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // 10. Serve Error Spin Distribution (%)
+    createServeErrorSpinChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // ============ BREAK POINTS ============
+    // 11. Break Point Conversion
+    createBreakPointChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // ============ UNFORCED ERRORS ============
+    // 12. Unforced Errors Breakdown (FH/BH) - Line Chart
+    createUEBreakdownChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // 13. Unforced Errors by Location (Net vs Out)
+    createUnforcedErrorLocationChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // 14. Error Location Totals (FH/BH Net/Out)
+    createErrorLocationTotalsChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // 15. Error Spin Composition (FH Net)
+    createFHNetSpinChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // 16. Error Spin Composition (FH Out)
+    createFHOutSpinChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // 17. Error Spin Composition (BH Net)
+    createBHNetSpinChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // 18. Error Spin Composition (BH Out)
+    createBHOutSpinChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // ============ SHOT ANALYSIS ============
+    // 19. Shot Speed Comparison
     createShotSpeedChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // 20. Forehand Spin Distribution
+    createForehandSpinTrendsChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // 21. Backhand Spin Distribution
+    createBackhandSpinTrendsChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // 22. Match Results Timeline
+    createResultsChart(dataSheet, chartsSheet, chartRow, lastRow);
     
     logDiagnostic("CHARTS", "Successfully updated all charts", "", "SUCCESS");
     console.log("✅ Charts updated successfully");
@@ -1176,15 +1306,15 @@ function createWinnersUEChart(dataSheet, chartsSheet, startRow, lastDataRow) {
       .addRange(dataSheet.getRange(1, 14, lastDataRow, 1)) // Total Winners (column 14)
       .addRange(dataSheet.getRange(1, 18, lastDataRow, 1)) // Total Unforced Errors (column 18)
       .setPosition(startRow, 1, 0, 0)
-      .setOption('title', 'Winners vs Unforced Errors Over Time')
+      .setOption('title', '🎾 Winners vs Unforced Errors Over Time')
       .setOption('width', 800)
       .setOption('height', 400)
       .setOption('legend', {position: 'bottom'})
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
-      .setOption('vAxis', {title: 'Count'})
+      .setOption('vAxis', {title: 'Count', minValue: 0})
       .setOption('series', {
-        0: {color: '#34A853', lineWidth: 3},
-        1: {color: '#EA4335', lineWidth: 3}
+        0: {color: '#34A853', lineWidth: 3, labelInLegend: 'Winners'},
+        1: {color: '#EA4335', lineWidth: 3, labelInLegend: 'Unforced Errors'}
       })
       .build();
     
@@ -1207,16 +1337,16 @@ function createServeStatsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
       .addRange(dataSheet.getRange(1, 7, lastDataRow, 1)) // First Serve Points Won % (column 7)
       .addRange(dataSheet.getRange(1, 24, lastDataRow, 1)) // Points Won % (column 24)
       .setPosition(startRow, 1, 0, 0)
-      .setOption('title', 'Serve Statistics Over Time')
+      .setOption('title', '🎯 Serve Statistics Over Time')
       .setOption('width', 800)
       .setOption('height', 400)
       .setOption('legend', {position: 'bottom'})
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Percentage (%)', minValue: 0, maxValue: 100})
       .setOption('series', {
-        0: {color: '#4285F4', lineWidth: 3},
-        1: {color: '#FBBC04', lineWidth: 3},
-        2: {color: '#34A853', lineWidth: 3}
+        0: {color: '#4285F4', lineWidth: 3, labelInLegend: '1st Serve %'},
+        1: {color: '#FBBC04', lineWidth: 3, labelInLegend: '1st Serve Points Won %'},
+        2: {color: '#34A853', lineWidth: 3, labelInLegend: 'Total Points Won %'}
       })
       .build();
     
@@ -1262,18 +1392,18 @@ function createServeSpeedChart(dataSheet, chartsSheet, startRow, lastDataRow) {
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
       .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
-      .addRange(dataSheet.getRange(1, 30, lastDataRow, 1)) // Avg 1st Serve Speed (column 30)
-      .addRange(dataSheet.getRange(1, 31, lastDataRow, 1)) // Avg 2nd Serve Speed (column 31)
+      .addRange(dataSheet.getRange(1, 27, lastDataRow, 1)) // Avg 1st Serve Speed (column 27)
+      .addRange(dataSheet.getRange(1, 28, lastDataRow, 1)) // Avg 2nd Serve Speed (column 28)
       .setPosition(startRow, 1, 0, 0)
-      .setOption('title', 'Serve Speed Trends Over Time')
+      .setOption('title', '⚡ Serve Speed Trends Over Time')
       .setOption('width', 800)
       .setOption('height', 400)
       .setOption('legend', {position: 'bottom'})
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Speed (mph)', minValue: 0})
       .setOption('series', {
-        0: {color: '#EA4335', lineWidth: 3}, // 1st Serve (red)
-        1: {color: '#FBBC04', lineWidth: 3}  // 2nd Serve (yellow)
+        0: {color: '#EA4335', lineWidth: 3, labelInLegend: '1st Serve Speed'}, // 1st Serve (red)
+        1: {color: '#FBBC04', lineWidth: 3, labelInLegend: '2nd Serve Speed'}  // 2nd Serve (yellow)
       })
       .build();
     
@@ -1292,18 +1422,18 @@ function createShotSpeedChart(dataSheet, chartsSheet, startRow, lastDataRow) {
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
       .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
-      .addRange(dataSheet.getRange(1, 32, lastDataRow, 1)) // Avg Forehand Speed (column 32)
-      .addRange(dataSheet.getRange(1, 33, lastDataRow, 1)) // Avg Backhand Speed (column 33)
+      .addRange(dataSheet.getRange(1, 29, lastDataRow, 1)) // Avg Forehand Speed (column 29)
+      .addRange(dataSheet.getRange(1, 30, lastDataRow, 1)) // Avg Backhand Speed (column 30)
       .setPosition(startRow, 1, 0, 0)
-      .setOption('title', 'Forehand vs Backhand Speed Over Time')
+      .setOption('title', '⚡ Forehand vs Backhand Speed Over Time')
       .setOption('width', 800)
       .setOption('height', 400)
       .setOption('legend', {position: 'bottom'})
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Speed (mph)', minValue: 0})
       .setOption('series', {
-        0: {color: '#4285F4', lineWidth: 3}, // Forehand (blue)
-        1: {color: '#9C27B0', lineWidth: 3}  // Backhand (purple)
+        0: {color: '#4285F4', lineWidth: 3, labelInLegend: 'Forehand Speed'}, // Forehand (blue)
+        1: {color: '#9C27B0', lineWidth: 3, labelInLegend: 'Backhand Speed'}  // Backhand (purple)
       })
       .build();
     
@@ -1315,8 +1445,687 @@ function createShotSpeedChart(dataSheet, chartsSheet, startRow, lastDataRow) {
 }
 
 /**
+ * Create Unforced Errors by Location chart (Net vs Out for FH/BH)
+ */
+function createUnforcedErrorLocationChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.COLUMN)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 40, lastDataRow, 1)) // FH Errors Net
+      .addRange(dataSheet.getRange(1, 41, lastDataRow, 1)) // FH Errors Out
+      .addRange(dataSheet.getRange(1, 42, lastDataRow, 1)) // BH Errors Net
+      .addRange(dataSheet.getRange(1, 43, lastDataRow, 1)) // BH Errors Out
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '🎯 Unforced Errors: Net vs Out (Forehand & Backhand)')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Count', minValue: 0})
+      .setOption('isStacked', false)
+      .setOption('series', {
+        0: {color: '#EA4335', targetAxisIndex: 0, labelInLegend: 'FH Net'}, // FH Net (red)
+        1: {color: '#FBBC04', targetAxisIndex: 0, labelInLegend: 'FH Out'}, // FH Out (yellow)
+        2: {color: '#4285F4', targetAxisIndex: 0, labelInLegend: 'BH Net'}, // BH Net (blue)
+        3: {color: '#34A853', targetAxisIndex: 0, labelInLegend: 'BH Out'}  // BH Out (green)
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating Unforced Error Location chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create Error Location Totals Chart (FH/BH Net/Out)
+ */
+function createErrorLocationTotalsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 40, lastDataRow, 1)) // FH Errors Net
+      .addRange(dataSheet.getRange(1, 41, lastDataRow, 1)) // FH Errors Out
+      .addRange(dataSheet.getRange(1, 42, lastDataRow, 1)) // BH Errors Net
+      .addRange(dataSheet.getRange(1, 43, lastDataRow, 1)) // BH Errors Out
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '❌ Error Location Totals (FH/BH Net/Out)')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Count', minValue: 0})
+      .setOption('series', {
+        0: {color: '#EA4335', lineWidth: 3, labelInLegend: 'FH Net'},   // Red
+        1: {color: '#FBBC04', lineWidth: 3, labelInLegend: 'FH Out'},   // Yellow
+        2: {color: '#4285F4', lineWidth: 3, labelInLegend: 'BH Net'},   // Blue
+        3: {color: '#34A853', lineWidth: 3, labelInLegend: 'BH Out'}    // Green
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating Error Location Totals chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create FH Net Spin Composition Chart
+ */
+function createFHNetSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 44, lastDataRow, 1)) // FH Net Topspin
+      .addRange(dataSheet.getRange(1, 45, lastDataRow, 1)) // FH Net Flat
+      .addRange(dataSheet.getRange(1, 46, lastDataRow, 1)) // FH Net Slice
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '🎾 FH Net Errors - Spin Composition')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Count', minValue: 0})
+      .setOption('series', {
+        0: {color: '#D32F2F', lineWidth: 3, labelInLegend: 'Topspin'},  // Dark Red
+        1: {color: '#FFA000', lineWidth: 3, labelInLegend: 'Flat'},     // Orange
+        2: {color: '#1976D2', lineWidth: 3, labelInLegend: 'Slice'}     // Dark Blue
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating FH Net Spin chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create FH Out Spin Composition Chart
+ */
+function createFHOutSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 47, lastDataRow, 1)) // FH Out Topspin
+      .addRange(dataSheet.getRange(1, 48, lastDataRow, 1)) // FH Out Flat
+      .addRange(dataSheet.getRange(1, 49, lastDataRow, 1)) // FH Out Slice
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '🎾 FH Out Errors - Spin Composition')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Count', minValue: 0})
+      .setOption('series', {
+        0: {color: '#C2185B', lineWidth: 3, labelInLegend: 'Topspin'},  // Pink
+        1: {color: '#00897B', lineWidth: 3, labelInLegend: 'Flat'},     // Teal
+        2: {color: '#5E35B1', lineWidth: 3, labelInLegend: 'Slice'}     // Purple
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating FH Out Spin chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create BH Net Spin Composition Chart
+ */
+function createBHNetSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 50, lastDataRow, 1)) // BH Net Topspin
+      .addRange(dataSheet.getRange(1, 51, lastDataRow, 1)) // BH Net Flat
+      .addRange(dataSheet.getRange(1, 52, lastDataRow, 1)) // BH Net Slice
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '🎾 BH Net Errors - Spin Composition')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Count', minValue: 0})
+      .setOption('series', {
+        0: {color: '#F44336', lineWidth: 3, labelInLegend: 'Topspin'},  // Red
+        1: {color: '#FF9800', lineWidth: 3, labelInLegend: 'Flat'},     // Orange
+        2: {color: '#2196F3', lineWidth: 3, labelInLegend: 'Slice'}     // Blue
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating BH Net Spin chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create BH Out Spin Composition Chart
+ */
+function createBHOutSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 53, lastDataRow, 1)) // BH Out Topspin
+      .addRange(dataSheet.getRange(1, 54, lastDataRow, 1)) // BH Out Flat
+      .addRange(dataSheet.getRange(1, 55, lastDataRow, 1)) // BH Out Slice
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '🎾 BH Out Errors - Spin Composition')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Count', minValue: 0})
+      .setOption('series', {
+        0: {color: '#9C27B0', lineWidth: 3, labelInLegend: 'Topspin'},  // Purple
+        1: {color: '#4CAF50', lineWidth: 3, labelInLegend: 'Flat'},     // Green
+        2: {color: '#00BCD4', lineWidth: 3, labelInLegend: 'Slice'}     // Cyan
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating BH Out Spin chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create Serve Error Spin Distribution chart
+ */
+function createServeErrorSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    // Calculate percentages for each row dynamically
+    const data = dataSheet.getRange(1, 1, lastDataRow, 33).getValues();
+    const percentageData = [['Match Date', 'Flat %', 'Kick %', 'Slice %']];
+    
+    for (let i = 1; i < data.length; i++) {
+      const matchDate = data[i][0];
+      const flat = data[i][30] || 0;  // Column 31
+      const kick = data[i][31] || 0;  // Column 32
+      const slice = data[i][32] || 0; // Column 33
+      const total = flat + kick + slice;
+      
+      if (total > 0) {
+        percentageData.push([
+          matchDate,
+          (flat / total) * 100,
+          (kick / total) * 100,
+          (slice / total) * 100
+        ]);
+      } else {
+        percentageData.push([matchDate, 0, 0, 0]);
+      }
+    }
+    
+    // Write percentage data to temporary range
+    const tempStartRow = lastDataRow + 5;
+    const tempRange = chartsSheet.getRange(tempStartRow, 1, percentageData.length, 4);
+    tempRange.setValues(percentageData);
+    
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(chartsSheet.getRange(tempStartRow, 1, percentageData.length, 1)) // Match Date
+      .addRange(chartsSheet.getRange(tempStartRow, 2, percentageData.length, 1)) // Flat %
+      .addRange(chartsSheet.getRange(tempStartRow, 3, percentageData.length, 1)) // Kick %
+      .addRange(chartsSheet.getRange(tempStartRow, 4, percentageData.length, 1)) // Slice %
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '🎾 Serve Error Spin Distribution (%)')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Percentage (%)', minValue: 0, maxValue: 100})
+      .setOption('series', {
+        0: {color: '#EA4335', lineWidth: 3, labelInLegend: 'Flat %'},   // Flat (red)
+        1: {color: '#FBBC04', lineWidth: 3, labelInLegend: 'Kick %'},   // Kick (yellow)
+        2: {color: '#4285F4', lineWidth: 3, labelInLegend: 'Slice %'}   // Slice (blue)
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating Serve Error Spin chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create Aces & Double Faults chart
+ */
+function createAcesDoubleFaultsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.COLUMN)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 9, lastDataRow, 1)) // Aces (column 9)
+      .addRange(dataSheet.getRange(1, 10, lastDataRow, 1)) // Double Faults (column 10)
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '🎾 Aces vs Double Faults')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Count', minValue: 0})
+      .setOption('series', {
+        0: {color: '#34A853', labelInLegend: 'Aces'}, // Aces (green)
+        1: {color: '#EA4335', labelInLegend: 'Double Faults'}  // Double Faults (red)
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating Aces/Double Faults chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create Break Point Conversion chart
+ */
+function createBreakPointChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 11, lastDataRow, 1)) // Break Points Won (column 11)
+      .addRange(dataSheet.getRange(1, 12, lastDataRow, 1)) // Break Points Total (column 12)
+      .addRange(dataSheet.getRange(1, 13, lastDataRow, 1)) // Break Point Conversion % (column 13)
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '🎯 Break Point Performance')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxes', {
+        0: {title: 'Count'},
+        1: {title: 'Percentage (%)'}
+      })
+      .setOption('series', {
+        0: {color: '#34A853', targetAxisIndex: 0, labelInLegend: 'BP Won'}, // BP Won (green)
+        1: {color: '#FBBC04', targetAxisIndex: 0, labelInLegend: 'BP Total'}, // BP Total (yellow)
+        2: {color: '#4285F4', targetAxisIndex: 1, lineWidth: 3, labelInLegend: 'BP Conversion %'} // BP % (blue)
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating Break Point chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create Winners Breakdown chart (Service/FH/BH)
+ */
+function createWinnersBreakdownChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.COLUMN)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 15, lastDataRow, 1)) // Service Winners (column 15)
+      .addRange(dataSheet.getRange(1, 16, lastDataRow, 1)) // Forehand Winners (column 16)
+      .addRange(dataSheet.getRange(1, 17, lastDataRow, 1)) // Backhand Winners (column 17)
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '🏆 Winners Breakdown by Type')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Count', minValue: 0})
+      .setOption('isStacked', true)
+      .setOption('series', {
+        0: {color: '#FBBC04', labelInLegend: 'Service Winners'}, // Service (yellow)
+        1: {color: '#34A853', labelInLegend: 'Forehand Winners'}, // Forehand (green)
+        2: {color: '#4285F4', labelInLegend: 'Backhand Winners'}  // Backhand (blue)
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating Winners Breakdown chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create Unforced Errors Breakdown chart (FH/BH)
+ */
+function createUEBreakdownChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 19, lastDataRow, 1)) // Forehand UE (column 19)
+      .addRange(dataSheet.getRange(1, 20, lastDataRow, 1)) // Backhand UE (column 20)
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '❌ Unforced Errors Breakdown (FH vs BH)')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Count', minValue: 0})
+      .setOption('series', {
+        0: {color: '#EA4335', lineWidth: 3, labelInLegend: 'Forehand UE'}, // Forehand (red)
+        1: {color: '#9C27B0', lineWidth: 3, labelInLegend: 'Backhand UE'}  // Backhand (purple)
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating UE Breakdown chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create Points Won Analysis chart
+ */
+function createPointsWonChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 22, lastDataRow, 1)) // Total Points Won (column 22)
+      .addRange(dataSheet.getRange(1, 23, lastDataRow, 1)) // Total Points (column 23)
+      .addRange(dataSheet.getRange(1, 24, lastDataRow, 1)) // Points Won % (column 24)
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '📊 Points Won Analysis')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxes', {
+        0: {title: 'Count'},
+        1: {title: 'Percentage (%)'}
+      })
+      .setOption('series', {
+        0: {color: '#34A853', targetAxisIndex: 0, labelInLegend: 'Points Won'}, // Points Won (green)
+        1: {color: '#FBBC04', targetAxisIndex: 0, labelInLegend: 'Total Points'}, // Total Points (yellow)
+        2: {color: '#4285F4', targetAxisIndex: 1, lineWidth: 3, labelInLegend: 'Points Won %'} // Points Won % (blue)
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating Points Won chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create Serve Spin Trends (Per Match)
+ */
+function createServeSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    // Calculate percentages for each row dynamically
+    const data = dataSheet.getRange(1, 1, lastDataRow, 29).getValues();
+    const percentageData = [['Match Date', 'Flat %', 'Kick %', 'Slice %']];
+    
+    for (let i = 1; i < data.length; i++) {
+      const matchDate = data[i][0];
+      const flat = data[i][26] || 0;  // Column 27
+      const kick = data[i][27] || 0;  // Column 28
+      const slice = data[i][28] || 0; // Column 29
+      const total = flat + kick + slice;
+      
+      if (total > 0) {
+        percentageData.push([
+          matchDate,
+          (flat / total) * 100,
+          (kick / total) * 100,
+          (slice / total) * 100
+        ]);
+      } else {
+        percentageData.push([matchDate, 0, 0, 0]);
+      }
+    }
+    
+    // Write percentage data to temporary range
+    const tempStartRow = lastDataRow + 10;
+    const tempRange = chartsSheet.getRange(tempStartRow, 1, percentageData.length, 4);
+    tempRange.setValues(percentageData);
+    
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(chartsSheet.getRange(tempStartRow, 1, percentageData.length, 1)) // Match Date
+      .addRange(chartsSheet.getRange(tempStartRow, 2, percentageData.length, 1)) // Flat %
+      .addRange(chartsSheet.getRange(tempStartRow, 3, percentageData.length, 1)) // Kick %
+      .addRange(chartsSheet.getRange(tempStartRow, 4, percentageData.length, 1)) // Slice %
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '🎾 Serve Spin Distribution (%)')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Percentage (%)', minValue: 0, maxValue: 100})
+      .setOption('series', {
+        0: {color: '#EA4335', lineWidth: 3, labelInLegend: 'Flat %'},
+        1: {color: '#FBBC04', lineWidth: 3, labelInLegend: 'Kick %'},
+        2: {color: '#4285F4', lineWidth: 3, labelInLegend: 'Slice %'}
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating Serve Spin Trends chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create Forehand Spin Trends (Per Match)
+ */
+function createForehandSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 34, lastDataRow, 1)) // FH Topspin
+      .addRange(dataSheet.getRange(1, 35, lastDataRow, 1)) // FH Flat
+      .addRange(dataSheet.getRange(1, 36, lastDataRow, 1)) // FH Slice
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '🎾 Forehand Spin Distribution Trends (Per Match)')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Count', minValue: 0})
+      .setOption('series', {
+        0: {color: '#EA4335', lineWidth: 3, labelInLegend: 'Topspin'},
+        1: {color: '#FBBC04', lineWidth: 3, labelInLegend: 'Flat'},
+        2: {color: '#4285F4', lineWidth: 3, labelInLegend: 'Slice'}
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating Forehand Spin Trends chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create Backhand Spin Trends (Per Match)
+ */
+function createBackhandSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 37, lastDataRow, 1)) // BH Topspin
+      .addRange(dataSheet.getRange(1, 38, lastDataRow, 1)) // BH Flat
+      .addRange(dataSheet.getRange(1, 39, lastDataRow, 1)) // BH Slice
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '🎾 Backhand Spin Distribution Trends (Per Match)')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Count', minValue: 0})
+      .setOption('series', {
+        0: {color: '#FF1744', lineWidth: 3, labelInLegend: 'Topspin'},  // Bright Red
+        1: {color: '#00E676', lineWidth: 3, labelInLegend: 'Flat'},     // Bright Green
+        2: {color: '#2979FF', lineWidth: 3, labelInLegend: 'Slice'}     // Bright Blue
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating Backhand Spin Trends chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create Second Serve Points Won % Trend
+ */
+function createSecondServePointsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 8, lastDataRow, 1)) // Second Serve Points Won % (column 8)
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '🎯 Second Serve Points Won % Trend')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Percentage (%)', minValue: 0, maxValue: 100})
+      .setOption('series', {
+        0: {color: '#FF5722', lineWidth: 3, labelInLegend: '2nd Serve Points Won %'}
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating Second Serve Points chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create Winners/UE Ratio Trend
+ */
+function createWinnersUERatioChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
+      .addRange(dataSheet.getRange(1, 21, lastDataRow, 1)) // Winners/UE Ratio (column 21)
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '📊 Winners/UE Ratio Trend (Higher is Better)')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Ratio', minValue: 0})
+      .setOption('series', {
+        0: {color: '#34A853', lineWidth: 3, labelInLegend: 'Winners/UE Ratio'}
+      })
+      .setOption('trendlines', {
+        0: {
+          type: 'linear',
+          color: '#EA4335',
+          lineWidth: 2,
+          opacity: 0.5,
+          showR2: true,
+          visibleInLegend: true
+        }
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating Winners/UE Ratio chart: ${error.message}`);
+  }
+}
+
+/**
  * 🔧 UTILITY FUNCTIONS
  */
+
+/**
+ * Delete all contents from all sheets (fresh start)
+ * Completely deletes and recreates all sheets with fresh headers
+ * Note: Google Sheets requires at least one sheet to exist at all times
+ */
+function clearAllSheets() {
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // Strategy: Recreate each sheet one at a time to maintain at least one sheet
+    console.log("🔄 Starting fresh sheet recreation...");
+    
+    // 1. Delete and recreate Match Data sheet
+    const dataSheet = spreadsheet.getSheetByName(DATA_SHEET_NAME);
+    if (dataSheet) {
+      spreadsheet.deleteSheet(dataSheet);
+      console.log("✅ Deleted Match Data sheet");
+    }
+    getMatchDataSheet(); // Recreate with headers
+    console.log("✅ Recreated Match Data sheet with headers");
+    
+    // 2. Delete and recreate Diagnostic sheet
+    const diagSheet = spreadsheet.getSheetByName("Diagnostic");
+    if (diagSheet) {
+      spreadsheet.deleteSheet(diagSheet);
+      console.log("✅ Deleted Diagnostic sheet");
+    }
+    getDiagnosticSheet(); // Recreate with headers
+    console.log("✅ Recreated Diagnostic sheet with headers");
+    
+    // 3. Delete and recreate Performance Charts sheet
+    const chartsSheet = spreadsheet.getSheetByName(CHARTS_SHEET_NAME);
+    if (chartsSheet) {
+      spreadsheet.deleteSheet(chartsSheet);
+      console.log("✅ Deleted Performance Charts sheet");
+    }
+    getChartsSheet(); // Recreate empty
+    console.log("✅ Recreated Performance Charts sheet");
+    
+    // 4. Delete any default sheets (like "Sheet1") if they exist
+    const allSheets = spreadsheet.getSheets();
+    for (let sheet of allSheets) {
+      const sheetName = sheet.getName();
+      // Only delete if it's not one of our three main sheets
+      if (sheetName !== DATA_SHEET_NAME && 
+          sheetName !== CHARTS_SHEET_NAME && 
+          sheetName !== "Diagnostic") {
+        try {
+          spreadsheet.deleteSheet(sheet);
+          console.log(`✅ Deleted extra sheet: ${sheetName}`);
+        } catch (e) {
+          // Can't delete if it's the last sheet - that's fine
+          console.log(`⚠️ Kept sheet: ${sheetName} (last sheet protection)`);
+        }
+      }
+    }
+    
+    const message = "🗑️ All sheets deleted and recreated with fresh headers! Ready for fresh start.";
+    
+    // Log to the newly recreated diagnostic sheet
+    logDiagnostic("SYSTEM", "All sheets cleared and reinitialized", "", "SUCCESS");
+    console.log(`✅ ${message}`);
+    
+  } catch (error) {
+    const errorMsg = `Failed to clear sheets: ${error.message}`;
+    console.error(`❌ ${errorMsg}`);
+  }
+}
 
 /**
  * Manual trigger to process all files (including already processed ones)
@@ -1359,12 +2168,9 @@ function reprocessAllFiles() {
     logDiagnostic("SYSTEM", summary, "", "SUCCESS");
     console.log(`✅ ${summary}`);
     
-    SpreadsheetApp.getUi().alert(`Reprocessing complete!\n\n${summary}`);
-    
   } catch (error) {
     logDiagnostic("SYSTEM", "Reprocessing failed", "", "ERROR", error.message);
     console.error(`❌ Error reprocessing files: ${error.message}`);
-    SpreadsheetApp.getUi().alert(`Error: ${error.message}`);
   }
 }
 
@@ -1396,6 +2202,7 @@ function onOpen() {
     .addItem('⚙️ Install Automatic Check (' + intervalText + ')', 'installTrigger')
     .addItem('🛑 Uninstall Automatic Check', 'uninstallTriggers')
     .addSeparator()
+    .addItem('🗑️ Clear All Sheets (Fresh Start)', 'clearAllSheets')
     .addItem('🗑️ Clear Diagnostic Log', 'clearDiagnosticLog')
     .addToUi();
 }
@@ -1428,20 +2235,13 @@ function initialize() {
     
     logDiagnostic("SYSTEM", "System initialized successfully", "", "SUCCESS");
     console.log("✅ System initialized successfully!");
-    
-    SpreadsheetApp.getUi().alert(
-      '🎾 Tennis Stats Analyzer Initialized!\n\n' +
-      `✅ Sheets created\n` +
-      `✅ Automatic check installed (${intervalText})\n` +
-      `✅ Initial file check completed\n\n` +
-      `The system will now automatically check for new match files.\n` +
-      `Check the "Diagnostic" sheet for detailed logs.`
-    );
+    console.log(`✅ Sheets created`);
+    console.log(`✅ Automatic check installed (${intervalText})`);
+    console.log(`✅ Initial file check completed`);
     
   } catch (error) {
     logDiagnostic("SYSTEM", "Initialization failed", "", "ERROR", error.message);
     console.error(`❌ Initialization error: ${error.message}`);
-    SpreadsheetApp.getUi().alert(`Initialization Error: ${error.message}`);
   }
 }
 

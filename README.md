@@ -13,32 +13,63 @@ The Tennis Stats Analyzer is a comprehensive Google Apps Script system for autom
 
 ---
 
-## ⭐ **RECENT UPDATES (v1.1)**
+## ⭐ **RECENT UPDATES (v1.2)**
 
-### 🆕 **NEW: Speed & Spin Analytics**
-- **Shot-by-Shot Analysis**: Extracts detailed data from SwingVision "Shots" sheet
-- **Speed Tracking** (4 metrics):
-  - Average 1st serve speed (mph)
-  - Average 2nd serve speed (mph)  
-  - Average forehand speed (mph)
-  - Average backhand speed (mph)
-- **Spin Distribution** (9 metrics):
-  - Serve types: Flat, Kick, Slice
-  - Forehand types: Topspin, Flat, Slice
-  - Backhand types: Topspin, Flat, Slice
-- **🆕 Unforced Error Analysis** (16 metrics):
-  - Net vs Out breakdown for forehand and backhand
-  - Spin type analysis for each error category
-  - Understand exactly how and why you're making errors
-- **New Charts** (2 total):
-  - Serve Speed Trends Over Time
-  - Forehand vs Backhand Speed Comparison
+### 🆕 **NEW: Enhanced Error & Serve Analysis**
+- **✅ Fixed duplicate match entries** - Proper file tracking prevents duplicates
+- **✅ Accurate speed extraction** - Uses Type column (first_serve/second_serve) from Shots sheet
+- **✅ Serve error spin composition** - Track which spin types cause serve errors
+- **✅ Removed calories & heart rate** - Cleaner focus on tennis-specific metrics
+- **✅ Enhanced UE analysis** - 3 new comprehensive error charts
 
-### 📊 **Data Expansion**
-- **58 total columns** in Match Data sheet (up from 30)
-- **15 speed/spin metrics** per match
-- **🆕 16 unforced error analysis metrics** per match
-- **5 charts total** for comprehensive visualization
+### 🎾 **Unforced Error Deep Dive** (16 metrics)
+- **Location Analysis**: Net vs Out breakdown for FH/BH
+- **Spin Analysis**: Topspin/Flat/Slice for each error type
+- **Serve Errors**: Spin composition of missed serves
+- **Visual Charts**: 3 dedicated error analysis charts
+
+### 📊 **Chart Updates**
+Now featuring **22 comprehensive charts** organized by category:
+
+**Match Performance (4 charts)**
+1. Winners vs Unforced Errors Over Time
+2. Winners/UE Ratio Trend
+3. Winners Breakdown (Service/FH/BH)
+4. Points Won Analysis
+
+**Serve Performance (6 charts)**
+5. First Serve % and Points Won %
+6. Second Serve Points Won % Trend
+7. Aces & Double Faults
+8. Serve Speed Trends (1st vs 2nd)
+9. Serve Spin Distribution (%)
+10. Serve Error Spin Distribution (%)
+
+**Break Points (1 chart)**
+11. Break Point Conversion
+
+**Unforced Errors (7 charts)**
+12. UE Breakdown (FH vs BH) - Line Chart
+13. UE by Location (Net vs Out)
+14. Error Location Totals (FH/BH Net/Out)
+15. FH Net Errors - Spin Composition
+16. FH Out Errors - Spin Composition
+17. BH Net Errors - Spin Composition
+18. BH Out Errors - Spin Composition
+
+**Shot Analysis (4 charts)**
+19. Shot Speed Comparison (FH vs BH)
+20. Forehand Spin Distribution
+21. Backhand Spin Distribution
+22. Match Results Timeline
+
+### 📈 **Data Expansion**
+- **60+ columns** in Match Data sheet
+- **19 serve & shot metrics** per match
+- **19 unforced error analysis metrics** per match
+- **22 organized charts** (Match Performance, Serve, Break Points, UE Analysis, Shot Analysis)
+- **Single file mode** for testing/debugging
+- **Percentage-based serve spin charts** for better comparison
 
 ### ⏱️ **Flexible Check Intervals**
 - **Minute-based**: 1, 5, 10, 15, or 30 minutes
@@ -55,22 +86,49 @@ The Tennis Stats Analyzer is a comprehensive Google Apps Script system for autom
 - Break point conversion
 - Winners breakdown (service, forehand, backhand)
 - Unforced errors breakdown (forehand, backhand)
-- Physical metrics (calories, distance, heart rate)
-- Match totals (points, games)
+- Match totals (points, games, distance)
 
 **From Shots Sheet** (shot-by-shot analysis):
-- Average speeds for all shot types
-- Spin distribution for serves and groundstrokes
-- Detailed tactical analysis
+- **Speed metrics**: 1st/2nd serve, forehand, backhand (uses Type column)
+- **Spin distribution**: Flat/Kick/Slice for serves and groundstrokes
+- **🆕 Serve error analysis**: Spin composition of missed serves (Out/Net)
+- **🆕 UE deep dive**: Net vs Out breakdown with spin analysis
+- **Detailed tactical patterns**: Shot-by-shot insights
 
 ### 📈 **2. Automatic Performance Charts**
-Five visual charts track your improvement:
+Twenty-two visual charts organized by category track your improvement:
 
+**🏆 Match Performance (4 charts)**
 1. **Winners vs Unforced Errors** - Shot quality trends
-2. **Serve Statistics** - First serve %, points won %, overall effectiveness
-3. **Winners/UE Ratio** - Consistency metric (higher is better)
-4. **🆕 Serve Speed Trends** - 1st vs 2nd serve power over time
-5. **🆕 Shot Speed Comparison** - Forehand vs backhand speed trends
+2. **Winners/UE Ratio** - Efficiency metric over time
+3. **Winners Breakdown** - Service/Forehand/Backhand winners
+4. **Points Won Analysis** - Total points and win %
+
+**🎾 Serve Performance (6 charts)**
+5. **Serve Statistics** - First serve %, points won %
+6. **Second Serve Points Won %** - Effectiveness trend
+7. **Aces & Double Faults** - Service extremes
+8. **Serve Speed Trends** - 1st vs 2nd serve power
+9. **Serve Spin Distribution (%)** - Flat/Kick/Slice usage
+10. **Serve Error Spin (%)** - Which serve types miss
+
+**💪 Break Points (1 chart)**
+11. **Break Point Conversion** - Clutch performance
+
+**❌ Unforced Errors (7 charts)**
+12. **UE Breakdown** - Forehand vs Backhand (line chart)
+13. **UE by Location** - Net vs Out patterns
+14. **Error Location Totals** - FH/BH Net/Out trends
+15. **FH Net Spin** - Topspin/Flat/Slice composition
+16. **FH Out Spin** - Topspin/Flat/Slice composition
+17. **BH Net Spin** - Topspin/Flat/Slice composition
+18. **BH Out Spin** - Topspin/Flat/Slice composition
+
+**🎯 Shot Analysis (4 charts)**
+19. **Shot Speed Comparison** - Forehand vs backhand speed
+20. **Forehand Spin Distribution** - Shot variety
+21. **Backhand Spin Distribution** - Shot variety
+22. **Match Results Timeline** - Win/loss patterns
 
 ### 🔄 **3. Intelligent Monitoring System**
 - **Time-based triggers**: Configurable check frequency
@@ -117,7 +175,18 @@ Before you begin, make sure you have:
 6. Click **save icon** (💾)
 7. Name your project: **"Tennis Stats Analyzer"**
 
-#### **Step 4: Authorize the Script (2 minutes)**
+#### **Step 4: Enable Drive API (1 minute)**
+🔑 **REQUIRED**: The script needs Drive API to convert XLSX files to Google Sheets format.
+
+1. In the Apps Script editor, click on **"Services"** (➕ icon in left sidebar)
+2. Find **"Drive API"** in the list
+3. Click **"Add"**
+4. Leave version as "v2" and identifier as "Drive"
+5. Click **"Add"**
+
+> ✅ This allows the script to read your XLSX files and convert them automatically.
+
+#### **Step 5: Authorize the Script (2 minutes)**
 1. Select **`initialize`** from the function dropdown
 2. Click the **Run button** (▶️)
 3. When prompted for permissions:
@@ -128,13 +197,13 @@ Before you begin, make sure you have:
 
 > ⚠️ The "unsafe" warning is normal - this is your own script, not a third-party app. Your data stays private.
 
-#### **Step 5: Wait for Initialization (1 minute)**
+#### **Step 6: Wait for Initialization (1 minute)**
 1. Script will run and set everything up
 2. You'll see a completion dialog
 3. Click **"OK"**
 4. Close the Apps Script editor tab
 
-#### **Step 6: Verify Installation (1 minute)**
+#### **Step 7: Verify Installation (1 minute)**
 Go back to your spreadsheet. You should see:
 
 **Three new sheets:**
@@ -230,7 +299,10 @@ const TARGET_SINGLE_FILE = null;  // Process all files
 
 **Important Notes:**
 - ✅ File must exist in your SwingVision folder
-- ✅ Filename must match **exactly** (including extension)
+- ✅ Filename must match **exactly** (including `.xlsx` extension)
+- ⚠️ **Common mistake**: Don't forget `.xlsx` at the end!
+  - ❌ Wrong: `"SwingVision-match-2025-12-03 at 22.59.47"`
+  - ✅ Correct: `"SwingVision-match-2025-12-03 at 22.59.47.xlsx"`
 - ✅ Already-processed files will be skipped (same as normal mode)
 - ⚠️ Automatic triggers will respect this setting
 - 💡 Useful for testing before enabling auto-check
@@ -889,6 +961,100 @@ A: Process all historical SwingVision files at once.
 
 ---
 
+## 🔧 **TROUBLESHOOTING**
+
+### Common Errors and Solutions
+
+#### ❌ **Error: "Service Spreadsheets failed while accessing document"**
+
+**Problem**: Script can't read XLSX files directly.
+
+**Solution**: Enable Drive API (required for XLSX conversion)
+
+1. Open Apps Script editor
+2. Click **"Services"** (➕ icon in left sidebar)
+3. Find **"Drive API"** → Click **"Add"**
+4. Use version "v2" and identifier "Drive"
+5. Save and run script again
+
+> ✅ The script now automatically converts XLSX → Google Sheets → reads data → deletes temp file
+
+---
+
+#### ❌ **Error: Target file not found (Single File Mode)**
+
+**Problem**: Filename doesn't match exactly.
+
+**Common mistakes:**
+- Missing `.xlsx` extension
+- Typo in filename
+- Wrong case (filenames are case-sensitive)
+
+**Solution**: Check exact filename in Google Drive
+
+```javascript
+// ❌ Wrong - missing extension
+const TARGET_SINGLE_FILE = "SwingVision-match-2025-12-03 at 22.59.47";
+
+// ✅ Correct - includes .xlsx
+const TARGET_SINGLE_FILE = "SwingVision-match-2025-12-03 at 22.59.47.xlsx";
+```
+
+---
+
+#### ❌ **Error: "Stats" sheet not found**
+
+**Problem**: XLSX file doesn't have a "Stats" sheet.
+
+**Solution**: Verify your SwingVision export includes "Stats" sheet
+
+1. Open XLSX in Excel/Google Sheets
+2. Check sheet tabs at bottom
+3. Must have: "Stats" (and optionally "Shots")
+
+---
+
+#### ⚠️ **Warning: Shots sheet not found**
+
+**Not an error** - Speed and spin stats will be unavailable.
+
+**Solution**: Use newer SwingVision exports that include "Shots" sheet
+
+- Script continues without error
+- Basic stats still work
+- Missing: serve speed, shot speed, spin distribution, detailed UE analysis
+
+---
+
+#### ❌ **Error: Trigger quota exceeded**
+
+**Problem**: Running checks too frequently (usually 1-minute intervals).
+
+**Solution**: Change to less frequent interval
+
+```javascript
+// Switch from 1 minute to 5 minutes or hourly
+const CHECK_INTERVAL_HOURS = 1;  // Safer option
+const CHECK_INTERVAL_MINUTES = null;
+```
+
+**Quota limits:**
+- Total runtime: 90 minutes/day
+- 1-minute checks = ~24 min/day ✅
+- 5-minute checks = ~5 min/day ✅✅
+
+---
+
+#### 🔍 **Diagnostic Logs**
+
+Check the **"Diagnostic"** sheet for detailed error messages:
+- Timestamp of errors
+- Specific file causing issues
+- Full error messages
+- Processing steps completed
+
+---
+
 ## 🏆 **CONCLUSION**
 
 The Tennis Stats Analyzer provides professional-grade performance tracking with minimal setup and zero ongoing maintenance. With comprehensive statistics, visual charts, and detailed analytics, it's everything you need to track and improve your tennis game.
@@ -900,11 +1066,11 @@ The system is designed for reliability, ease of use, and actionable insights - f
 ---
 
 *Last Updated: December 2024*  
-*Version: 1.2*  
-*Features: 58 metrics, 5 charts, shot-by-shot analysis, error analysis*  
-*Total Functions: 30+*  
-*Lines of Code: 1,300+*  
+*Version: 1.3.0*  
+*Features: 60+ metrics, 22 charts organized by category, shot-by-shot analysis, comprehensive error analysis*  
+*Total Functions: 40+*  
+*Lines of Code: 2,000+*  
 *Sheets Created: 3 (Match Data, Performance Charts, Diagnostic)*  
-*Latest: 🆕 Unforced error analysis (Net vs Out), speed & spin analytics*  
+*Latest: 🆕 Reorganized charts by category, serve spin %, detailed error spin composition (4 charts)*  
 *Data Sources: Stats sheet (aggregated) + Shots sheet (detailed)*  
-*Error Tracking: Net/Out breakdown + spin analysis for every error*
+*Error Tracking: Net/Out breakdown + spin analysis for FH/BH Net/Out + serve error composition*
