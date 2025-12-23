@@ -1315,22 +1315,48 @@ function updateCharts() {
 
 /**
  * Helper function to get filtered data (exclude practice matches)
- * Returns filtered data array with specified columns
+ * Returns filtered data array with specified columns, sorted by date
  */
 function getFilteredRealMatchData(dataSheet, lastDataRow, columns) {
   const isPracticeColumn = 58; // "Is Practice Match" column
-  const allData = dataSheet.getRange(1, 1, lastDataRow, Math.max(...columns)).getValues();
+  
+  // Read ALL columns including isPracticeMatch column
+  const allData = dataSheet.getRange(1, 1, lastDataRow, Math.max(isPracticeColumn, ...columns)).getValues();
   
   // Header row
   const filteredData = [columns.map(col => allData[0][col - 1])];
   
-  // Filter out practice matches (rows where isPractice === true)
+  // Collect non-practice match rows with their original data
+  const realMatches = [];
   for (let i = 1; i < allData.length; i++) {
     const isPractice = allData[i][isPracticeColumn - 1];
+    
+    // Debug logging
+    if (i <= 3) {
+      console.log(`Row ${i}: isPractice=${isPractice}, date=${allData[i][0]}`);
+    }
+    
     if (!isPractice) { // If NOT practice match, include it
-      filteredData.push(columns.map(col => allData[i][col - 1]));
+      realMatches.push({
+        date: allData[i][0],
+        row: columns.map(col => allData[i][col - 1])
+      });
     }
   }
+  
+  // Sort by date chronologically
+  realMatches.sort((a, b) => {
+    const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+    const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+    return dateA - dateB;
+  });
+  
+  // Add sorted rows to filtered data
+  for (const match of realMatches) {
+    filteredData.push(match.row);
+  }
+  
+  console.log(`Filtered ${realMatches.length} real matches from ${allData.length - 1} total matches`);
   
   return filteredData;
 }
@@ -1361,6 +1387,7 @@ function createWinnersUEChart(dataSheet, chartsSheet, startRow, lastDataRow) {
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Count', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#34A853', lineWidth: 3, labelInLegend: 'Winners'},
         1: {color: '#EA4335', lineWidth: 3, labelInLegend: 'Unforced Errors'}
@@ -1401,6 +1428,7 @@ function createServeStatsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Percentage (%)', minValue: 0, maxValue: 100})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#4285F4', lineWidth: 3, labelInLegend: '1st Serve %'},
         1: {color: '#FBBC04', lineWidth: 3, labelInLegend: '1st Serve Points Won %'},
@@ -1433,6 +1461,7 @@ function createResultsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Winners/UE Ratio', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('colors', ['#34A853'])
       .build();
     
@@ -1461,6 +1490,7 @@ function createServeSpeedChart(dataSheet, chartsSheet, startRow, lastDataRow) {
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Speed (mph)', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#EA4335', lineWidth: 3, labelInLegend: '1st Serve Speed'}, // 1st Serve (red)
         1: {color: '#FBBC04', lineWidth: 3, labelInLegend: '2nd Serve Speed'}  // 2nd Serve (yellow)
@@ -1492,6 +1522,7 @@ function createShotSpeedChart(dataSheet, chartsSheet, startRow, lastDataRow) {
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Speed (mph)', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#4285F4', lineWidth: 3, labelInLegend: 'Forehand Speed'}, // Forehand (blue)
         1: {color: '#9C27B0', lineWidth: 3, labelInLegend: 'Backhand Speed'}  // Backhand (purple)
@@ -1525,6 +1556,7 @@ function createUnforcedErrorLocationChart(dataSheet, chartsSheet, startRow, last
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Count', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('isStacked', false)
       .setOption('dataLabelsPlacement', 'outsideEnd')
       .setOption('series', {
@@ -1561,7 +1593,8 @@ function createErrorLocationTotalsChart(dataSheet, chartsSheet, startRow, lastDa
       .setOption('legend', {position: 'bottom'})
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Count', minValue: 0})
-      .setOption('curveType', 'function')  // Smooth lines
+      .setOption('curveType', 'function')
+      .setOption('pointSize', 5)  // Smooth lines
       .setOption('series', {
         0: {color: '#EA4335', lineWidth: 3, labelInLegend: 'FH Net'},   // Red
         1: {color: '#FBBC04', lineWidth: 3, labelInLegend: 'FH Out'},   // Yellow
@@ -1596,6 +1629,7 @@ function createFHNetSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Count', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#D32F2F', lineWidth: 3, labelInLegend: 'Topspin'},  // Dark Red
         1: {color: '#FFA000', lineWidth: 3, labelInLegend: 'Flat'},     // Orange
@@ -1629,6 +1663,7 @@ function createFHOutSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Count', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#C2185B', lineWidth: 3, labelInLegend: 'Topspin'},  // Pink
         1: {color: '#00897B', lineWidth: 3, labelInLegend: 'Flat'},     // Teal
@@ -1662,6 +1697,7 @@ function createBHNetSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Count', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#F44336', lineWidth: 3, labelInLegend: 'Topspin'},  // Red
         1: {color: '#FF9800', lineWidth: 3, labelInLegend: 'Flat'},     // Orange
@@ -1695,6 +1731,7 @@ function createBHOutSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Count', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#9C27B0', lineWidth: 3, labelInLegend: 'Topspin'},  // Purple
         1: {color: '#4CAF50', lineWidth: 3, labelInLegend: 'Flat'},     // Green
@@ -1718,6 +1755,8 @@ function createServeErrorSpinChart(dataSheet, chartsSheet, startRow, lastDataRow
     const data = dataSheet.getRange(1, 1, lastDataRow, 33).getValues();
     const percentageData = [['Match Date', 'Flat %', 'Kick %', 'Slice %']];
     
+    // Collect all matches with their data
+    const matches = [];
     for (let i = 1; i < data.length; i++) {
       const matchDate = data[i][0];
       const flat = data[i][30] || 0;  // Column 31
@@ -1725,21 +1764,33 @@ function createServeErrorSpinChart(dataSheet, chartsSheet, startRow, lastDataRow
       const slice = data[i][32] || 0; // Column 33
       const total = flat + kick + slice;
       
-      // Format date as string to preserve order
-      const dateStr = matchDate instanceof Date ? 
-        Utilities.formatDate(matchDate, Session.getScriptTimeZone(), 'yyyy-MM-dd') : 
-        matchDate;
-      
       if (total > 0) {
-        percentageData.push([
-          dateStr,
-          (flat / total) * 100,
-          (kick / total) * 100,
-          (slice / total) * 100
-        ]);
+        matches.push({
+          date: matchDate,
+          flat: (flat / total) * 100,
+          kick: (kick / total) * 100,
+          slice: (slice / total) * 100
+        });
       } else {
-        percentageData.push([dateStr, 0, 0, 0]);
+        matches.push({
+          date: matchDate,
+          flat: 0,
+          kick: 0,
+          slice: 0
+        });
       }
+    }
+    
+    // Sort by date chronologically
+    matches.sort((a, b) => {
+      const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+      const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+      return dateA - dateB;
+    });
+    
+    // Build sorted data array
+    for (const match of matches) {
+      percentageData.push([match.date, match.flat, match.kick, match.slice]);
     }
     
     // Write percentage data to temporary range
@@ -1761,6 +1812,7 @@ function createServeErrorSpinChart(dataSheet, chartsSheet, startRow, lastDataRow
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Percentage (%)', minValue: 0, maxValue: 100})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#EA4335', lineWidth: 3, labelInLegend: 'Flat %'},   // Flat (red)
         1: {color: '#FBBC04', lineWidth: 3, labelInLegend: 'Kick %'},   // Kick (yellow)
@@ -1793,6 +1845,7 @@ function createAcesDoubleFaultsChart(dataSheet, chartsSheet, startRow, lastDataR
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Count', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#34A853', labelInLegend: 'Aces'}, // Aces (green)
         1: {color: '#EA4335', labelInLegend: 'Double Faults'}  // Double Faults (red)
@@ -1876,6 +1929,7 @@ function createWinnersBreakdownChart(dataSheet, chartsSheet, startRow, lastDataR
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Count', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('isStacked', true)
       .setOption('series', {
         0: {color: '#FBBC04', labelInLegend: 'Service Winners'}, // Service (yellow)
@@ -1917,6 +1971,7 @@ function createUEBreakdownChart(dataSheet, chartsSheet, startRow, lastDataRow) {
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Count', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#EA4335', lineWidth: 3, labelInLegend: 'Forehand UE'}, // Forehand (red)
         1: {color: '#9C27B0', lineWidth: 3, labelInLegend: 'Backhand UE'}  // Backhand (purple)
@@ -1982,6 +2037,8 @@ function createServeSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDataRo
     const data = dataSheet.getRange(1, 1, lastDataRow, 29).getValues();
     const percentageData = [['Match Date', 'Flat %', 'Kick %', 'Slice %']];
     
+    // Collect all matches with their data
+    const matches = [];
     for (let i = 1; i < data.length; i++) {
       const matchDate = data[i][0];
       const flat = data[i][26] || 0;  // Column 27
@@ -1989,21 +2046,33 @@ function createServeSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDataRo
       const slice = data[i][28] || 0; // Column 29
       const total = flat + kick + slice;
       
-      // Format date as string to preserve order
-      const dateStr = matchDate instanceof Date ? 
-        Utilities.formatDate(matchDate, Session.getScriptTimeZone(), 'yyyy-MM-dd') : 
-        matchDate;
-      
       if (total > 0) {
-        percentageData.push([
-          dateStr,
-          (flat / total) * 100,
-          (kick / total) * 100,
-          (slice / total) * 100
-        ]);
+        matches.push({
+          date: matchDate,
+          flat: (flat / total) * 100,
+          kick: (kick / total) * 100,
+          slice: (slice / total) * 100
+        });
       } else {
-        percentageData.push([dateStr, 0, 0, 0]);
+        matches.push({
+          date: matchDate,
+          flat: 0,
+          kick: 0,
+          slice: 0
+        });
       }
+    }
+    
+    // Sort by date chronologically
+    matches.sort((a, b) => {
+      const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+      const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+      return dateA - dateB;
+    });
+    
+    // Build sorted data array
+    for (const match of matches) {
+      percentageData.push([match.date, match.flat, match.kick, match.slice]);
     }
     
     // Write percentage data to temporary range
@@ -2025,6 +2094,7 @@ function createServeSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDataRo
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Percentage (%)', minValue: 0, maxValue: 100})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#EA4335', lineWidth: 3, labelInLegend: 'Flat %'},
         1: {color: '#FBBC04', lineWidth: 3, labelInLegend: 'Kick %'},
@@ -2058,6 +2128,7 @@ function createForehandSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDat
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Count', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#EA4335', lineWidth: 3, labelInLegend: 'Topspin'},
         1: {color: '#FBBC04', lineWidth: 3, labelInLegend: 'Flat'},
@@ -2091,6 +2162,7 @@ function createBackhandSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDat
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Count', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#FF1744', lineWidth: 3, labelInLegend: 'Topspin'},  // Bright Red
         1: {color: '#00E676', lineWidth: 3, labelInLegend: 'Flat'},     // Bright Green
@@ -2130,6 +2202,7 @@ function createSecondServePointsChart(dataSheet, chartsSheet, startRow, lastData
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Percentage (%)', minValue: 0, maxValue: 100})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#FF5722', lineWidth: 3, labelInLegend: '2nd Serve Points Won %'}
       })
@@ -2167,6 +2240,7 @@ function createWinnersUERatioChart(dataSheet, chartsSheet, startRow, lastDataRow
       .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
       .setOption('vAxis', {title: 'Ratio', minValue: 0})
       .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
       .setOption('series', {
         0: {color: '#34A853', lineWidth: 3, labelInLegend: 'Winners/UE Ratio'}
       })
@@ -2379,4 +2453,5 @@ function initialize() {
     console.error(`❌ Initialization error: ${error.message}`);
   }
 }
+
 
