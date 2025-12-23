@@ -1221,87 +1221,91 @@ function updateCharts() {
     createWinnersUERatioChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 3. Winners Breakdown (Service/FH/BH)
-    createWinnersBreakdownChart(dataSheet, chartsSheet, chartRow, lastRow);
+    // 3. Groundstroke Winners (FH vs BH)
+    createGroundstrokeWinnersChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 4. Points Won Analysis
+    // 4. Service Winners
+    createServiceWinnersChart(dataSheet, chartsSheet, chartRow, lastRow);
+    chartRow += 25;
+    
+    // 5. Points Won Analysis
     createPointsWonChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
     // ============ SERVE PERFORMANCE ============
-    // 5. First Serve % and Points Won %
+    // 6. First Serve % and Points Won %
     createServeStatsChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 6. Second Serve Points Won % Trend
+    // 7. Second Serve Points Won % Trend
     createSecondServePointsChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 7. Aces & Double Faults
+    // 8. Aces & Double Faults
     createAcesDoubleFaultsChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 8. Serve Speed Trends
+    // 9. Serve Speed Trends
     createServeSpeedChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 9. Serve Spin Distribution (%)
+    // 10. Serve Spin Distribution (%)
     createServeSpinTrendsChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 10. Serve Error Spin Distribution (%)
+    // 11. Serve Error Spin Distribution (%)
     createServeErrorSpinChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
     // ============ BREAK POINTS ============
-    // 11. Break Point Conversion
+    // 12. Break Point Conversion
     createBreakPointChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
     // ============ UNFORCED ERRORS ============
-    // 12. Unforced Errors Breakdown (FH/BH) - Line Chart
+    // 13. Unforced Errors Breakdown (FH/BH) - Line Chart
     createUEBreakdownChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 13. Unforced Errors by Location (Net vs Out)
+    // 14. Unforced Errors by Location (Net vs Out)
     createUnforcedErrorLocationChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 14. Error Location Totals (FH/BH Net/Out)
+    // 15. Error Location Totals (FH/BH Net/Out)
     createErrorLocationTotalsChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 15. Error Spin Composition (FH Net)
+    // 16. Error Spin Composition (FH Net)
     createFHNetSpinChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 16. Error Spin Composition (FH Out)
+    // 17. Error Spin Composition (FH Out)
     createFHOutSpinChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 17. Error Spin Composition (BH Net)
+    // 18. Error Spin Composition (BH Net)
     createBHNetSpinChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 18. Error Spin Composition (BH Out)
+    // 19. Error Spin Composition (BH Out)
     createBHOutSpinChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
     // ============ SHOT ANALYSIS ============
-    // 19. Shot Speed Comparison
+    // 20. Shot Speed Comparison
     createShotSpeedChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 20. Forehand Spin Distribution
+    // 21. Forehand Spin Distribution
     createForehandSpinTrendsChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 21. Backhand Spin Distribution
+    // 22. Backhand Spin Distribution
     createBackhandSpinTrendsChart(dataSheet, chartsSheet, chartRow, lastRow);
     chartRow += 25;
     
-    // 22. Match Results Timeline
+    // 23. Match Results Timeline
     createResultsChart(dataSheet, chartsSheet, chartRow, lastRow);
     
     logDiagnostic("CHARTS", "Successfully updated all charts", "", "SUCCESS");
@@ -1905,24 +1909,23 @@ function createBreakPointChart(dataSheet, chartsSheet, startRow, lastDataRow) {
 /**
  * Create Winners Breakdown chart (Service/FH/BH)
  */
-function createWinnersBreakdownChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+function createGroundstrokeWinnersChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
-    // Get filtered data (real matches only)
-    const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 15, 16, 17]);
+    // Get filtered data (real matches only) - FH and BH winners
+    const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 16, 17]);
     
     // Write filtered data to temporary range
     const tempStartRow = lastDataRow + 130;
-    const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 4);
+    const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 3);
     tempRange.setValues(filteredData);
     
     const chart = chartsSheet.newChart()
-      .setChartType(Charts.ChartType.COLUMN)
+      .setChartType(Charts.ChartType.LINE)
       .addRange(chartsSheet.getRange(tempStartRow, 1, filteredData.length, 1)) // Match Date
-      .addRange(chartsSheet.getRange(tempStartRow, 2, filteredData.length, 1)) // Service Winners
-      .addRange(chartsSheet.getRange(tempStartRow, 3, filteredData.length, 1)) // Forehand Winners
-      .addRange(chartsSheet.getRange(tempStartRow, 4, filteredData.length, 1)) // Backhand Winners
+      .addRange(chartsSheet.getRange(tempStartRow, 2, filteredData.length, 1)) // Forehand Winners
+      .addRange(chartsSheet.getRange(tempStartRow, 3, filteredData.length, 1)) // Backhand Winners
       .setPosition(startRow, 1, 0, 0)
-      .setOption('title', '🏆 Winners Breakdown by Type')
+      .setOption('title', '🏆 Groundstroke Winners (FH vs BH)')
       .setOption('width', 800)
       .setOption('height', 400)
       .setOption('legend', {position: 'bottom'})
@@ -1930,18 +1933,54 @@ function createWinnersBreakdownChart(dataSheet, chartsSheet, startRow, lastDataR
       .setOption('vAxis', {title: 'Count', minValue: 0})
       .setOption('curveType', 'function')
       .setOption('pointSize', 5)
-      .setOption('isStacked', true)
       .setOption('series', {
-        0: {color: '#FBBC04', labelInLegend: 'Service Winners'}, // Service (yellow)
-        1: {color: '#34A853', labelInLegend: 'Forehand Winners'}, // Forehand (green)
-        2: {color: '#4285F4', labelInLegend: 'Backhand Winners'}  // Backhand (blue)
+        0: {color: '#34A853', lineWidth: 3, labelInLegend: 'Forehand Winners'}, // Forehand (green)
+        1: {color: '#4285F4', lineWidth: 3, labelInLegend: 'Backhand Winners'}  // Backhand (blue)
       })
       .build();
     
     chartsSheet.insertChart(chart);
     
   } catch (error) {
-    console.error(`Error creating Winners Breakdown chart: ${error.message}`);
+    console.error(`Error creating Groundstroke Winners chart: ${error.message}`);
+  }
+}
+
+/**
+ * Create Service Winners chart
+ */
+function createServiceWinnersChart(dataSheet, chartsSheet, startRow, lastDataRow) {
+  try {
+    // Get filtered data (real matches only) - Service winners
+    const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 15]);
+    
+    // Write filtered data to temporary range
+    const tempStartRow = lastDataRow + 135;
+    const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 2);
+    tempRange.setValues(filteredData);
+    
+    const chart = chartsSheet.newChart()
+      .setChartType(Charts.ChartType.LINE)
+      .addRange(chartsSheet.getRange(tempStartRow, 1, filteredData.length, 1)) // Match Date
+      .addRange(chartsSheet.getRange(tempStartRow, 2, filteredData.length, 1)) // Service Winners
+      .setPosition(startRow, 1, 0, 0)
+      .setOption('title', '🏆 Service Winners Trend')
+      .setOption('width', 800)
+      .setOption('height', 400)
+      .setOption('legend', {position: 'bottom'})
+      .setOption('hAxis', {title: 'Match Date', slantedText: true, slantedTextAngle: 45})
+      .setOption('vAxis', {title: 'Count', minValue: 0})
+      .setOption('curveType', 'function')
+      .setOption('pointSize', 5)
+      .setOption('series', {
+        0: {color: '#FBBC04', lineWidth: 3, labelInLegend: 'Service Winners'} // Service (yellow)
+      })
+      .build();
+    
+    chartsSheet.insertChart(chart);
+    
+  } catch (error) {
+    console.error(`Error creating Service Winners chart: ${error.message}`);
   }
 }
 
