@@ -2,12 +2,12 @@
 
 // Check interval - Choose ONE option below:
 // Option 1: Check every N hours (set CHECK_INTERVAL_HOURS, leave CHECK_INTERVAL_MINUTES as null)
-const CHECK_INTERVAL_HOURS = 1; // Options: 1, 2, 3, 4, 6, 8, 12, or 24 hours
-const CHECK_INTERVAL_MINUTES = null; // Set to null when using hours
+//const CHECK_INTERVAL_HOURS = 1; // Options: 1, 2, 3, 4, 6, 8, 12, or 24 hours
+//const CHECK_INTERVAL_MINUTES = null; // Set to null when using hours
 
 // Option 2: Check every N minutes (set CHECK_INTERVAL_MINUTES, leave CHECK_INTERVAL_HOURS as null)
 // const CHECK_INTERVAL_HOURS = null; // Set to null when using minutes
-// const CHECK_INTERVAL_MINUTES = 1; // Options: 1, 5, 10, 15, or 30 minutes
+ const CHECK_INTERVAL_MINUTES = 1; // Options: 1, 5, 10, 15, or 30 minutes
 
 // 🎯 Single File Mode - Process only ONE specific file
 // Set to null to process all files in folder (normal mode)
@@ -396,22 +396,33 @@ function extractDateFromFilename(filename) {
 
 /**
  * Check if a file has already been processed
+ * Checks both FileID and FileName to prevent duplicates
  */
-function isFileProcessed(fileId) {
+function isFileProcessed(fileId, fileName) {
   const dataSheet = getMatchDataSheet();
-  const data = dataSheet.getDataRange().getValues();
+  const lastRow = dataSheet.getLastRow();
   
-  // Check if file ID exists in the File ID column
-  // File ID is column 57 (third from last: FileID, isPracticeMatch, ProcessedDate)
-  for (let i = 1; i < data.length; i++) {
-    const rowFileId = data[i][data[i].length - 3]; // Third from last column (File ID)
-    if (rowFileId === fileId) {
-      console.log(`File already processed: ${fileId}`);
+  if (lastRow <= 1) {
+    return false; // No data yet
+  }
+  
+  // Get only the necessary columns (FileID and FileName)
+  const fileIdColumn = dataSheet.getRange(2, 57, lastRow - 1, 1).getValues(); // Column 57: File ID
+  const fileNameColumn = dataSheet.getRange(2, 2, lastRow - 1, 1).getValues(); // Column 2: File Name
+  
+  // Check if file ID or file name already exists
+  for (let i = 0; i < fileIdColumn.length; i++) {
+    const rowFileId = fileIdColumn[i][0];
+    const rowFileName = fileNameColumn[i][0];
+    
+    if (rowFileId === fileId || rowFileName === fileName) {
+      console.log(`File already processed: ${fileName} (ID: ${fileId})`);
+      logDiagnostic("DUPLICATE", `Skipping already processed file: ${fileName}`, fileName, "WARNING");
       return true;
     }
   }
   
-  console.log(`File NOT yet processed: ${fileId}`);
+  console.log(`File NOT yet processed: ${fileName}`);
   return false;
 }
 
@@ -1025,11 +1036,22 @@ function addMatchData(matchData) {
     
     dataSheet.appendRow(rowData);
     
-    // Sort by match date (column 1)
+    // Sort by match date (column 1) - CHRONOLOGICAL ORDER
     const lastRow = dataSheet.getLastRow();
     if (lastRow > 2) {
+      // Get all data rows
       const dataRange = dataSheet.getRange(2, 1, lastRow - 1, rowData.length);
-      dataRange.sort({column: 1, ascending: true});
+      const allData = dataRange.getValues();
+      
+      // Sort chronologically by date (column 0 in the array, column 1 in sheet)
+      allData.sort((a, b) => {
+        const dateA = a[0] instanceof Date ? a[0] : new Date(a[0]);
+        const dateB = b[0] instanceof Date ? b[0] : new Date(b[0]);
+        return dateA.getTime() - dateB.getTime(); // Ascending (oldest first)
+      });
+      
+      // Write sorted data back
+      dataRange.setValues(allData);
     }
     
     logDiagnostic("DATA", "Added match data to sheet", matchData.fileName, "SUCCESS");
@@ -1080,7 +1102,7 @@ function checkForNewMatches() {
         const fileName = targetFile.getName();
         
         // Check if already processed
-        if (isFileProcessed(fileId)) {
+        if (isFileProcessed(fileId, fileName)) {
           const message = `Target file "${TARGET_SINGLE_FILE}" has already been processed`;
           logDiagnostic("SYSTEM", message, "", "WARNING");
           console.log(`⚠️ ${message}`);
@@ -1122,7 +1144,7 @@ function checkForNewMatches() {
         const fileName = file.getName();
         
         // Check if file has already been processed
-        if (isFileProcessed(fileId)) {
+        if (isFileProcessed(fileId, fileName)) {
           continue;
         }
         
@@ -1337,25 +1359,18 @@ function getFilteredRealMatchData(dataSheet, lastDataRow, columns) {
   for (let i = 1; i < allData.length; i++) {
     const isPractice = allData[i][isPracticeColumn - 1];
     
-    // Debug logging
-    if (i <= 3) {
-      console.log(`Row ${i}: isPractice=${isPractice}, date=${allData[i][0]}`);
-    }
-    
     if (!isPractice) { // If NOT practice match, include it
+      const date = allData[i][0];
       realMatches.push({
-        date: allData[i][0],
+        date: date,
+        dateTime: date instanceof Date ? date.getTime() : new Date(date).getTime(),
         row: columns.map(col => allData[i][col - 1])
       });
     }
   }
   
-  // Sort by date chronologically
-  realMatches.sort((a, b) => {
-    const dateA = a.date instanceof Date ? a.date : new Date(a.date);
-    const dateB = b.date instanceof Date ? b.date : new Date(b.date);
-    return dateA - dateB;
-  });
+  // Sort by date chronologically using timestamp for accuracy
+  realMatches.sort((a, b) => a.dateTime - b.dateTime);
   
   // Add sorted rows to filtered data
   for (const match of realMatches) {
@@ -1376,7 +1391,7 @@ function createWinnersUEChart(dataSheet, chartsSheet, startRow, lastDataRow) {
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 14, 18]);
     
     // Write filtered data to temporary range on charts sheet
-    const tempStartRow = lastDataRow + 100;
+    const tempStartRow = lastDataRow + 50;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 3);
     tempRange.setValues(filteredData);
     
@@ -1416,7 +1431,7 @@ function createServeStatsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 6, 7, 24]);
     
     // Write filtered data to temporary range
-    const tempStartRow = lastDataRow + 110;
+    const tempStartRow = lastDataRow + 80;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 4);
     tempRange.setValues(filteredData);
     
@@ -1875,7 +1890,7 @@ function createBreakPointChart(dataSheet, chartsSheet, startRow, lastDataRow) {
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 11, 12, 13]);
     
     // Write filtered data to temporary range
-    const tempStartRow = lastDataRow + 120;
+    const tempStartRow = lastDataRow + 110;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 4);
     tempRange.setValues(filteredData);
     
@@ -1918,7 +1933,7 @@ function createGroundstrokeWinnersChart(dataSheet, chartsSheet, startRow, lastDa
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 16, 17]);
     
     // Write filtered data to temporary range
-    const tempStartRow = lastDataRow + 130;
+    const tempStartRow = lastDataRow + 140;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 3);
     tempRange.setValues(filteredData);
     
@@ -1958,7 +1973,7 @@ function createServiceWinnersChart(dataSheet, chartsSheet, startRow, lastDataRow
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 15]);
     
     // Write filtered data to temporary range
-    const tempStartRow = lastDataRow + 135;
+    const tempStartRow = lastDataRow + 170;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 2);
     tempRange.setValues(filteredData);
     
@@ -1996,7 +2011,7 @@ function createUEBreakdownChart(dataSheet, chartsSheet, startRow, lastDataRow) {
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 19, 20]);
     
     // Write filtered data to temporary range
-    const tempStartRow = lastDataRow + 140;
+    const tempStartRow = lastDataRow + 200;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 3);
     tempRange.setValues(filteredData);
     
@@ -2036,7 +2051,7 @@ function createPointsWonChart(dataSheet, chartsSheet, startRow, lastDataRow) {
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 22, 23, 24]);
     
     // Write filtered data to temporary range
-    const tempStartRow = lastDataRow + 150;
+    const tempStartRow = lastDataRow + 230;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 4);
     tempRange.setValues(filteredData);
     
@@ -2325,7 +2340,7 @@ function createSecondServePointsChart(dataSheet, chartsSheet, startRow, lastData
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 8]);
     
     // Write filtered data to temporary range
-    const tempStartRow = lastDataRow + 160;
+    const tempStartRow = lastDataRow + 260;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 2);
     tempRange.setValues(filteredData);
     
@@ -2363,7 +2378,7 @@ function createWinnersUERatioChart(dataSheet, chartsSheet, startRow, lastDataRow
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 21]);
     
     // Write filtered data to temporary range
-    const tempStartRow = lastDataRow + 170;
+    const tempStartRow = lastDataRow + 290;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 2);
     tempRange.setValues(filteredData);
     
