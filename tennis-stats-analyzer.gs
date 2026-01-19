@@ -1342,6 +1342,78 @@ function updateCharts() {
 }
 
 /**
+ * 🔍 Validate chart data for chronological order (detects zigzag lines)
+ * Returns true if data is chronological, false otherwise
+ */
+function validateChronologicalOrder(data, chartName) {
+  if (!data || data.length <= 2) {
+    return true; // Header only or too few rows to check
+  }
+  
+  const dates = [];
+  for (let i = 1; i < data.length; i++) { // Skip header row
+    const date = data[i][0];
+    if (date instanceof Date) {
+      dates.push({
+        date: date,
+        timestamp: date.getTime(),
+        row: i
+      });
+    }
+  }
+  
+  if (dates.length === 0) {
+    return true; // No dates to check
+  }
+  
+  // Check if dates are in chronological order
+  let hasZigzag = false;
+  let firstBreak = null;
+  
+  for (let i = 0; i < dates.length - 1; i++) {
+    if (dates[i].timestamp > dates[i + 1].timestamp) {
+      hasZigzag = true;
+      if (!firstBreak) {
+        firstBreak = {
+          row: dates[i].row,
+          date1: dates[i].date,
+          date2: dates[i + 1].date
+        };
+      }
+    }
+  }
+  
+  if (hasZigzag) {
+    const message = `⚠️  ZIGZAG DETECTED in "${chartName}": Date order breaks at row ${firstBreak.row} (${firstBreak.date1} → ${firstBreak.date2})`;
+    console.error(message);
+    logDiagnostic("CHART_VALIDATION", message, chartName, "ERROR");
+    return false;
+  }
+  
+  // Check for duplicate dates
+  const dateMap = new Map();
+  for (const d of dates) {
+    const dateStr = d.date.toISOString();
+    if (dateMap.has(dateStr)) {
+      dateMap.set(dateStr, dateMap.get(dateStr) + 1);
+    } else {
+      dateMap.set(dateStr, 1);
+    }
+  }
+  
+  const duplicates = Array.from(dateMap.entries()).filter(([_, count]) => count > 1);
+  if (duplicates.length > 0) {
+    const message = `⚠️  DUPLICATE DATES in "${chartName}": ${duplicates.length} dates appear multiple times`;
+    console.warn(message);
+    logDiagnostic("CHART_VALIDATION", message, chartName, "WARNING");
+  }
+  
+  // Success
+  console.log(`✅ "${chartName}": Chronological order validated (${dates.length} dates)`);
+  return true;
+}
+
+/**
  * Helper function to get filtered data (exclude practice matches)
  * Returns filtered data array with specified columns, sorted by date
  */
@@ -1390,6 +1462,9 @@ function createWinnersUEChart(dataSheet, chartsSheet, startRow, lastDataRow) {
     // Get filtered data (real matches only)
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 14, 18]);
     
+    // 🔍 Validate chronological order
+    validateChronologicalOrder(filteredData, "Winners vs Unforced Errors");
+    
     // Write filtered data to temporary range on charts sheet
     const tempStartRow = lastDataRow + 50;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 3);
@@ -1430,6 +1505,9 @@ function createServeStatsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
     // Get filtered data (real matches only)
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 6, 7, 24]);
     
+    // 🔍 Validate chronological order
+    validateChronologicalOrder(filteredData, "Serve Statistics");
+    
     // Write filtered data to temporary range
     const tempStartRow = lastDataRow + 80;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 4);
@@ -1469,6 +1547,10 @@ function createServeStatsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
  */
 function createResultsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // 🔍 Validate chronological order
+    const dataToValidate = dataSheet.getRange(1, 1, lastDataRow, 21).getValues();
+    validateChronologicalOrder(dataToValidate, "Match Results Timeline");
+    
     // This creates a simple visualization of match results
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.COLUMN)
@@ -1498,6 +1580,10 @@ function createResultsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
  */
 function createServeSpeedChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // 🔍 Validate chronological order
+    const dataToValidate = dataSheet.getRange(1, 1, lastDataRow, 28).getValues();
+    validateChronologicalOrder(dataToValidate, "Serve Speed Trends");
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
       .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
@@ -1530,6 +1616,10 @@ function createServeSpeedChart(dataSheet, chartsSheet, startRow, lastDataRow) {
  */
 function createShotSpeedChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // 🔍 Validate chronological order
+    const dataToValidate = dataSheet.getRange(1, 1, lastDataRow, 30).getValues();
+    validateChronologicalOrder(dataToValidate, "Shot Speed Comparison");
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
       .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
@@ -1562,6 +1652,10 @@ function createShotSpeedChart(dataSheet, chartsSheet, startRow, lastDataRow) {
  */
 function createUnforcedErrorLocationChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // 🔍 Validate chronological order
+    const dataToValidate = dataSheet.getRange(1, 1, lastDataRow, 43).getValues();
+    validateChronologicalOrder(dataToValidate, "Unforced Errors by Location");
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.COLUMN)
       .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
@@ -1600,6 +1694,10 @@ function createUnforcedErrorLocationChart(dataSheet, chartsSheet, startRow, last
  */
 function createErrorLocationTotalsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // 🔍 Validate chronological order
+    const dataToValidate = dataSheet.getRange(1, 1, lastDataRow, 43).getValues();
+    validateChronologicalOrder(dataToValidate, "Error Location Totals");
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
       .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
@@ -1636,6 +1734,10 @@ function createErrorLocationTotalsChart(dataSheet, chartsSheet, startRow, lastDa
  */
 function createFHNetSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // 🔍 Validate chronological order
+    const dataToValidate = dataSheet.getRange(1, 1, lastDataRow, 46).getValues();
+    validateChronologicalOrder(dataToValidate, "FH Net Error Spin Composition");
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
       .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
@@ -1670,6 +1772,10 @@ function createFHNetSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
  */
 function createFHOutSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // 🔍 Validate chronological order
+    const dataToValidate = dataSheet.getRange(1, 1, lastDataRow, 49).getValues();
+    validateChronologicalOrder(dataToValidate, "FH Out Error Spin Composition");
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
       .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
@@ -1704,6 +1810,10 @@ function createFHOutSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
  */
 function createBHNetSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // 🔍 Validate chronological order
+    const dataToValidate = dataSheet.getRange(1, 1, lastDataRow, 52).getValues();
+    validateChronologicalOrder(dataToValidate, "BH Net Error Spin Composition");
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
       .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
@@ -1738,6 +1848,10 @@ function createBHNetSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
  */
 function createBHOutSpinChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // 🔍 Validate chronological order
+    const dataToValidate = dataSheet.getRange(1, 1, lastDataRow, 55).getValues();
+    validateChronologicalOrder(dataToValidate, "BH Out Error Spin Composition");
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.LINE)
       .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
@@ -1815,6 +1929,9 @@ function createServeErrorSpinChart(dataSheet, chartsSheet, startRow, lastDataRow
       percentageData.push([match.date, match.flat, match.kick, match.slice]);
     }
     
+    // 🔍 Validate chronological order
+    validateChronologicalOrder(percentageData, "Serve Error Spin Distribution");
+    
     // Write percentage data to temporary range
     const tempStartRow = lastDataRow + 5;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, percentageData.length, 4);
@@ -1854,6 +1971,10 @@ function createServeErrorSpinChart(dataSheet, chartsSheet, startRow, lastDataRow
  */
 function createAcesDoubleFaultsChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
+    // 🔍 Validate chronological order
+    const dataToValidate = dataSheet.getRange(1, 1, lastDataRow, 10).getValues();
+    validateChronologicalOrder(dataToValidate, "Aces vs Double Faults");
+    
     const chart = chartsSheet.newChart()
       .setChartType(Charts.ChartType.COLUMN)
       .addRange(dataSheet.getRange(1, 1, lastDataRow, 1)) // Match Date
@@ -1888,6 +2009,9 @@ function createBreakPointChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
     // Get filtered data (real matches only)
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 11, 12, 13]);
+    
+    // 🔍 Validate chronological order
+    validateChronologicalOrder(filteredData, "Break Point Performance");
     
     // Write filtered data to temporary range
     const tempStartRow = lastDataRow + 110;
@@ -1932,6 +2056,9 @@ function createGroundstrokeWinnersChart(dataSheet, chartsSheet, startRow, lastDa
     // Get filtered data (real matches only) - FH and BH winners
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 16, 17]);
     
+    // 🔍 Validate chronological order
+    validateChronologicalOrder(filteredData, "Groundstroke Winners");
+    
     // Write filtered data to temporary range
     const tempStartRow = lastDataRow + 140;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 3);
@@ -1972,6 +2099,9 @@ function createServiceWinnersChart(dataSheet, chartsSheet, startRow, lastDataRow
     // Get filtered data (real matches only) - Service winners
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 15]);
     
+    // 🔍 Validate chronological order
+    validateChronologicalOrder(filteredData, "Service Winners");
+    
     // Write filtered data to temporary range
     const tempStartRow = lastDataRow + 170;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 2);
@@ -2009,6 +2139,9 @@ function createUEBreakdownChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
     // Get filtered data (real matches only)
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 19, 20]);
+    
+    // 🔍 Validate chronological order
+    validateChronologicalOrder(filteredData, "Unforced Errors Breakdown");
     
     // Write filtered data to temporary range
     const tempStartRow = lastDataRow + 200;
@@ -2049,6 +2182,9 @@ function createPointsWonChart(dataSheet, chartsSheet, startRow, lastDataRow) {
   try {
     // Get filtered data (real matches only)
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 22, 23, 24]);
+    
+    // 🔍 Validate chronological order
+    validateChronologicalOrder(filteredData, "Points Won Analysis");
     
     // Write filtered data to temporary range
     const tempStartRow = lastDataRow + 230;
@@ -2133,6 +2269,9 @@ function createServeSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDataRo
       percentageData.push([match.date, match.flat, match.kick, match.slice]);
     }
     
+    // 🔍 Validate chronological order
+    validateChronologicalOrder(percentageData, "Serve Spin Distribution");
+    
     // Write percentage data to temporary range
     const tempStartRow = lastDataRow + 10;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, percentageData.length, 4);
@@ -2214,6 +2353,9 @@ function createForehandSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDat
     for (const match of matches) {
       percentageData.push([match.date, match.topspin, match.flat, match.slice]);
     }
+    
+    // 🔍 Validate chronological order
+    validateChronologicalOrder(percentageData, "Forehand Spin Distribution");
     
     // Write percentage data to temporary range
     const tempStartRow = lastDataRow + 15;
@@ -2297,6 +2439,9 @@ function createBackhandSpinTrendsChart(dataSheet, chartsSheet, startRow, lastDat
       percentageData.push([match.date, match.topspin, match.flat, match.slice]);
     }
     
+    // 🔍 Validate chronological order
+    validateChronologicalOrder(percentageData, "Backhand Spin Distribution");
+    
     // Write percentage data to temporary range
     const tempStartRow = lastDataRow + 20;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, percentageData.length, 4);
@@ -2339,6 +2484,9 @@ function createSecondServePointsChart(dataSheet, chartsSheet, startRow, lastData
     // Get filtered data (real matches only)
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 8]);
     
+    // 🔍 Validate chronological order
+    validateChronologicalOrder(filteredData, "Second Serve Points Won %");
+    
     // Write filtered data to temporary range
     const tempStartRow = lastDataRow + 260;
     const tempRange = chartsSheet.getRange(tempStartRow, 1, filteredData.length, 2);
@@ -2376,6 +2524,9 @@ function createWinnersUERatioChart(dataSheet, chartsSheet, startRow, lastDataRow
   try {
     // Get filtered data (real matches only)
     const filteredData = getFilteredRealMatchData(dataSheet, lastDataRow, [1, 21]);
+    
+    // 🔍 Validate chronological order
+    validateChronologicalOrder(filteredData, "Winners/UE Ratio");
     
     // Write filtered data to temporary range
     const tempStartRow = lastDataRow + 290;
